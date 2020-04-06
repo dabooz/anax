@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"github.com/golang/glog"
 	"github.com/open-horizon/anax/abstractprotocol"
+	"github.com/open-horizon/anax/agreementbot/matchcache"
 	"github.com/open-horizon/anax/agreementbot/persistence"
 	"github.com/open-horizon/anax/config"
+	"github.com/open-horizon/anax/cutil"
 	"github.com/open-horizon/anax/events"
 	"github.com/open-horizon/anax/exchange"
 	"github.com/open-horizon/anax/metering"
@@ -18,8 +20,8 @@ import (
 	"time"
 )
 
-func CreateConsumerPH(name string, cfg *config.HorizonConfig, db persistence.AgbotDatabase, pm *policy.PolicyManager, msgq chan events.Message, mmsObjMgr *MMSObjectPolicyManager) ConsumerProtocolHandler {
-	if handler := NewBasicProtocolHandler(name, cfg, db, pm, msgq, mmsObjMgr); handler != nil {
+func CreateConsumerPH(name string, cfg *config.HorizonConfig, db persistence.AgbotDatabase, pm policy.IPolicyManager, msgq chan events.Message, mmsObjMgr *MMSObjectPolicyManager, matchCache *matchcache.MatchCache, depPolMgr *BusinessPolicyManager) ConsumerProtocolHandler {
+	if handler := NewBasicProtocolHandler(name, cfg, db, pm, msgq, mmsObjMgr, matchCache, depPolMgr); handler != nil {
 		return handler
 	} // Add new consumer side protocol handlers here
 	return nil
@@ -40,6 +42,7 @@ type ConsumerProtocolHandler interface {
 	HandlePolicyDeleted(cmd *PolicyDeletedCommand, cph ConsumerProtocolHandler)
 	HandleServicePolicyChanged(cmd *ServicePolicyChangedCommand, cph ConsumerProtocolHandler)
 	HandleServicePolicyDeleted(cmd *ServicePolicyDeletedCommand, cph ConsumerProtocolHandler)
+	HandleNodePolicyChanged(cmd *NodePolicyChangedCommand, cph ConsumerProtocolHandler)
 	HandleMMSObjectPolicy(cmd *MMSObjectPolicyEventCommand, cph ConsumerProtocolHandler)
 	HandleWorkloadUpgrade(cmd *WorkloadUpgradeCommand, cph ConsumerProtocolHandler)
 	HandleMakeAgreement(cmd *MakeAgreementCommand, cph ConsumerProtocolHandler)
@@ -78,7 +81,7 @@ type ConsumerProtocolHandler interface {
 
 type BaseConsumerProtocolHandler struct {
 	name             string
-	pm               *policy.PolicyManager
+	pm               policy.IPolicyManager
 	db               persistence.AgbotDatabase
 	config           *config.HorizonConfig
 	httpClient       *http.Client // shared HTTP client instance
@@ -87,6 +90,8 @@ type BaseConsumerProtocolHandler struct {
 	deferredCommands []AgreementWork // The agreement related work that has to be deferred and retried
 	messages         chan events.Message
 	mmsObjMgr        *MMSObjectPolicyManager
+	matchCache       *matchcache.MatchCache
+	depPolicyMgr     *BusinessPolicyManager
 }
 
 func (b *BaseConsumerProtocolHandler) GetSendMessage() func(mt interface{}, pay []byte) error {
@@ -229,40 +234,9 @@ func (b *BaseConsumerProtocolHandler) HandlePolicyChanged(cmd *PolicyChangedComm
 
 	glog.V(5).Infof(BCPHlogstring(b.Name(), "received policy changed command."))
 
-	if eventPol, err := policy.DemarshalPolicy(cmd.Msg.PolicyString()); err != nil {
-		glog.Errorf(BCPHlogstring(b.Name(), fmt.Sprintf("error demarshalling change policy event %v, error: %v", cmd.Msg.PolicyString(), err)))
-	} else {
-
-		InProgress := func() persistence.AFilter {
-			return func(e persistence.Agreement) bool { return e.AgreementCreationTime != 0 && e.AgreementTimedout == 0 }
-		}
-
-		if agreements, err := b.db.FindAgreements([]persistence.AFilter{persistence.UnarchivedAFilter(), InProgress()}, cph.Name()); err == nil {
-			for _, ag := range agreements {
-
-				if pol, err := policy.DemarshalPolicy(ag.Policy); err != nil {
-					glog.Errorf(BCPHlogstring(b.Name(), fmt.Sprintf("unable to demarshal policy for agreement %v, error %v", ag.CurrentAgreementId, err)))
-
-				} else if eventPol.Header.Name != pol.Header.Name {
-					// This agreement is using a policy different from the one that changed.
-					glog.V(5).Infof(BCPHlogstring(b.Name(), fmt.Sprintf("policy change handler skipping agreement %v because it is using a policy that did not change.", ag.CurrentAgreementId)))
-					continue
-				} else if err := b.pm.MatchesMine(cmd.Msg.Org(), pol); err != nil {
-					glog.Warningf(BCPHlogstring(b.Name(), fmt.Sprintf("agreement %v has a policy %v that has changed: %v", ag.CurrentAgreementId, pol.Header.Name, err)))
-					b.CancelAgreement(ag, TERM_REASON_POLICY_CHANGED, cph)
-				} else {
-					glog.V(5).Infof(BCPHlogstring(b.Name(), fmt.Sprintf("for agreement %v, no policy content differences detected", ag.CurrentAgreementId)))
-				}
-
-			}
-		} else {
-			glog.Errorf(BCPHlogstring(b.Name(), fmt.Sprintf("error searching database: %v", err)))
-		}
-	}
-}
-
-func (b *BaseConsumerProtocolHandler) HandlePolicyDeleted(cmd *PolicyDeletedCommand, cph ConsumerProtocolHandler) {
-	glog.V(5).Infof(BCPHlogstring(b.Name(), "received policy deleted command."))
+	// if eventPol, err := policy.DemarshalPolicy(cmd.Msg.PolicyString()); err != nil {
+	// 	glog.Errorf(BCPHlogstring(b.Name(), fmt.Sprintf("error demarshalling change policy event %v, error: %v", cmd.Msg.PolicyString(), err)))
+	// } else {
 
 	InProgress := func() persistence.AFilter {
 		return func(e persistence.Agreement) bool { return e.AgreementCreationTime != 0 && e.AgreementTimedout == 0 }
@@ -273,21 +247,87 @@ func (b *BaseConsumerProtocolHandler) HandlePolicyDeleted(cmd *PolicyDeletedComm
 
 			if pol, err := policy.DemarshalPolicy(ag.Policy); err != nil {
 				glog.Errorf(BCPHlogstring(b.Name(), fmt.Sprintf("unable to demarshal policy for agreement %v, error %v", ag.CurrentAgreementId, err)))
-			} else if cmd.Msg.Org() == ag.Org {
-				if existingPol := b.pm.GetPolicy(cmd.Msg.Org(), pol.Header.Name); existingPol == nil {
-					glog.Errorf(BCPHlogstring(b.Name(), fmt.Sprintf("agreement %v has a policy %v that doesn't exist anymore", ag.CurrentAgreementId, pol.Header.Name)))
 
-					// Remove any workload usage records so that a new agreement will be made starting from the highest priority workload.
-					if err := b.db.DeleteWorkloadUsage(ag.DeviceId, ag.PolicyName); err != nil {
-						glog.Warningf(BCPHlogstring(b.Name(), fmt.Sprintf("error deleting workload usage for %v using policy %v, error: %v", ag.DeviceId, ag.PolicyName, err)))
-					}
-
-					// Queue up a cancellation command for this agreement.
-					agreementWork := NewCancelAgreement(ag.CurrentAgreementId, ag.AgreementProtocol, cph.GetTerminationCode(TERM_REASON_POLICY_CHANGED), 0)
-					cph.WorkQueue().InboundHigh() <- &agreementWork
-
-				}
+			} else if cmd.Policy.Header.Name != pol.Header.Name || cmd.Org != ag.Org {
+				// This agreement is using a policy different from the one that changed.
+				glog.V(5).Infof(BCPHlogstring(b.Name(), fmt.Sprintf("policy change handler skipping agreement %v because it is using a policy that did not change.", ag.CurrentAgreementId)))
+				continue
+			} else if err := pol.IsSame(cmd.Policy); err != nil {
+				glog.Warningf(BCPHlogstring(b.Name(), fmt.Sprintf("agreement %v has a policy %v that has changed: %v", ag.CurrentAgreementId, pol.Header.Name, err)))
+				b.CancelAgreement(ag, TERM_REASON_POLICY_CHANGED, cph)
+			} else {
+				glog.V(5).Infof(BCPHlogstring(b.Name(), fmt.Sprintf("for agreement %v, no policy content differences detected", ag.CurrentAgreementId)))
 			}
+
+		}
+	} else {
+		glog.Errorf(BCPHlogstring(b.Name(), fmt.Sprintf("error searching database: %v", err)))
+	}
+	// }
+}
+
+// All the deployment plus service policies for any agreement with a given node should be compatible with the node policy. If any are
+// now incompatible, cancel the agreement and adjust the match cache accordingly. This function assumes that the caller
+// has already updated the node policy in the match cache.
+func (b *BaseConsumerProtocolHandler) HandleNodePolicyChanged(cmd *NodePolicyChangedCommand, cph ConsumerProtocolHandler) {
+
+	glog.V(5).Infof(BCPHlogstring(b.Name(), "received node policy changed command."))
+
+	InProgress := func() persistence.AFilter {
+		return func(e persistence.Agreement) bool { return e.AgreementCreationTime != 0 && e.AgreementTimedout == 0 && e.DeviceId == cmd.NodeId }
+	}
+
+	if agreements, err := b.db.FindAgreements([]persistence.AFilter{persistence.UnarchivedAFilter(), InProgress()}, cph.Name()); err != nil {
+		glog.Errorf(BCPHlogstring(b.Name(), fmt.Sprintf("error searching database: %v", err)))
+	} else {
+
+		for _, ag := range agreements {
+
+			if pol, err := policy.DemarshalPolicy(ag.Policy); err != nil {
+				glog.Errorf(BCPHlogstring(b.Name(), fmt.Sprintf("unable to demarshal policy for agreement %v, error %v", ag.CurrentAgreementId, err)))
+
+			} else if err := policy.Are_Compatible(cmd.InternalPolicy, pol, nil); err != nil {
+				glog.Infof(BCPHlogstring(b.Name(), fmt.Sprintf("agreement %v with %v is no longer compatible with node %v: %v", ag.CurrentAgreementId, ag.PolicyName, cmd.NodeId, err)))
+				b.CancelAgreement(ag, TERM_REASON_POLICY_CHANGED, cph)
+				b.matchCache.InvalidateNodeWithPolicy(cmd.NodeId, ag.PolicyName)
+			} else {
+				glog.V(5).Infof(BCPHlogstring(b.Name(), fmt.Sprintf("for agreement %v, no policy differences detected", ag.CurrentAgreementId)))
+			}
+
+		}
+	}
+
+}
+
+func (b *BaseConsumerProtocolHandler) HandlePolicyDeleted(cmd *PolicyDeletedCommand, cph ConsumerProtocolHandler) {
+	glog.V(5).Infof(BCPHlogstring(b.Name(), "received policy deleted command."))
+
+	InProgress := func() persistence.AFilter {
+		return func(e persistence.Agreement) bool {
+			return e.AgreementCreationTime != 0 && e.AgreementTimedout == 0 && cmd.Org == e.Org && cmd.Name == e.PolicyName
+		}
+	}
+
+	if agreements, err := b.db.FindAgreements([]persistence.AFilter{persistence.UnarchivedAFilter(), InProgress()}, cph.Name()); err == nil {
+		for _, ag := range agreements {
+
+			// if pol, err := policy.DemarshalPolicy(ag.Policy); err != nil {
+			// 	glog.Errorf(BCPHlogstring(b.Name(), fmt.Sprintf("unable to demarshal policy for agreement %v, error %v", ag.CurrentAgreementId, err)))
+			// } else if cmd.Org == ag.Org && cmd.Name == pol.Header.Name {
+			// if existingPol := b.pm.GetPolicy(cmd.Msg.Org(), pol.Header.Name); existingPol == nil {
+			glog.Errorf(BCPHlogstring(b.Name(), fmt.Sprintf("agreement %v has a policy %v that doesn't exist anymore", ag.CurrentAgreementId, cmd.Name)))
+
+			// Remove any workload usage records so that a new agreement will be made starting from the highest priority workload.
+			if err := b.db.DeleteWorkloadUsage(ag.DeviceId, ag.PolicyName); err != nil {
+				glog.Warningf(BCPHlogstring(b.Name(), fmt.Sprintf("error deleting workload usage for %v using policy %v, error: %v", ag.DeviceId, ag.PolicyName, err)))
+			}
+
+			// Queue up a cancellation command for this agreement.
+			agreementWork := NewCancelAgreement(ag.CurrentAgreementId, ag.AgreementProtocol, cph.GetTerminationCode(TERM_REASON_POLICY_CHANGED), 0)
+			cph.WorkQueue().InboundHigh() <- &agreementWork
+
+			// }
+			// }
 		}
 	} else {
 		glog.Errorf(BCPHlogstring(b.Name(), fmt.Sprintf("error searching database: %v", err)))
@@ -296,17 +336,17 @@ func (b *BaseConsumerProtocolHandler) HandlePolicyDeleted(cmd *PolicyDeletedComm
 
 func (b *BaseConsumerProtocolHandler) HandleServicePolicyChanged(cmd *ServicePolicyChangedCommand, cph ConsumerProtocolHandler) {
 
-	glog.V(5).Infof(BCPHlogstring(b.Name(), "received service policy changed command: %v. cmd"))
+	glog.V(5).Infof(BCPHlogstring(b.Name(), "received service policy changed command."))
 
 	InProgress := func() persistence.AFilter {
-		return func(e persistence.Agreement) bool { return e.AgreementCreationTime != 0 && e.AgreementTimedout == 0 }
+		return func(e persistence.Agreement) bool { return e.AgreementCreationTime != 0 && e.AgreementTimedout == 0 && e.Pattern == "" && e.PolicyName == fmt.Sprintf("%v/%v", cmd.Org, cmd.Name) }
 	}
 
 	if agreements, err := b.db.FindAgreements([]persistence.AFilter{persistence.UnarchivedAFilter(), InProgress()}, cph.Name()); err == nil {
 		for _, ag := range agreements {
-			if ag.Pattern == "" && ag.PolicyName == fmt.Sprintf("%v/%v", cmd.Msg.BusinessPolOrg, cmd.Msg.BusinessPolName) && ag.ServiceId[0] == cmd.Msg.ServiceId {
+			if cutil.SliceContains(cmd.Nodes, ag.DeviceId) {
 
-				glog.Warningf(BCPHlogstring(b.Name(), fmt.Sprintf("agreement %v has a service policy %v that has changed.", ag.CurrentAgreementId, ag.ServiceId)))
+				glog.Infof(BCPHlogstring(b.Name(), fmt.Sprintf("agreement %v has a service policy that has changed.", ag.CurrentAgreementId)))
 				b.CancelAgreement(ag, TERM_REASON_POLICY_CHANGED, cph)
 			}
 		}

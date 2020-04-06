@@ -29,31 +29,54 @@ func NewAgreementTimeoutCommand(agreementId string, protocol string, reason uint
 
 // ==============================================================================================================
 type PolicyChangedCommand struct {
-	Msg events.PolicyChangedMessage
+	Org    string
+	Policy *policy.Policy
 }
 
 func (p PolicyChangedCommand) ShortString() string {
 	return fmt.Sprintf("%v", p)
 }
 
-func NewPolicyChangedCommand(msg events.PolicyChangedMessage) *PolicyChangedCommand {
+func NewPolicyChangedCommand(org string, pol *policy.Policy) *PolicyChangedCommand {
 	return &PolicyChangedCommand{
-		Msg: msg,
+		Org:    org,
+		Policy: pol,
 	}
 }
 
 // ==============================================================================================================
 type PolicyDeletedCommand struct {
-	Msg events.PolicyDeletedMessage
+	Org  string
+	Name string
 }
 
 func (p PolicyDeletedCommand) ShortString() string {
 	return fmt.Sprintf("%v", p)
 }
 
-func NewPolicyDeletedCommand(msg events.PolicyDeletedMessage) *PolicyDeletedCommand {
+func NewPolicyDeletedCommand(org string, polName string) *PolicyDeletedCommand {
 	return &PolicyDeletedCommand{
-		Msg: msg,
+		Org:  org,
+		Name: polName,
+	}
+}
+
+// ==============================================================================================================
+type NodePolicyChangedCommand struct {
+	NodeId    string
+	InternalPolicy *policy.Policy
+	ExternalPolicy *externalpolicy.ExternalPolicy
+}
+
+func (p NodePolicyChangedCommand) ShortString() string {
+	return fmt.Sprintf("%v", p)
+}
+
+func NewNodePolicyChangedCommand(nodeId string, ext *externalpolicy.ExternalPolicy, pol *policy.Policy) *NodePolicyChangedCommand {
+	return &NodePolicyChangedCommand{
+		NodeId:    nodeId,
+		InternalPolicy: pol,
+		ExternalPolicy: ext,
 	}
 }
 
@@ -129,12 +152,9 @@ func (e MakeAgreementCommand) ShortString() string {
 }
 
 func NewMakeAgreementCommand(pPol policy.Policy, cPol policy.Policy, org string, polname string, dev exchange.SearchResultDevice, cachedServicePolicies map[string]externalpolicy.ExternalPolicy) *MakeAgreementCommand {
-
-	copiedConsumerPolicy := cPol.DeepCopy()
-
 	return &MakeAgreementCommand{
 		ProducerPolicy:     pPol,
-		ConsumerPolicy:     *copiedConsumerPolicy,
+		ConsumerPolicy:     cPol,
 		Org:                org,
 		ConsumerPolicyName: polname,
 		Device:             dev,
@@ -202,33 +222,37 @@ func NewAgbotShutdownCommand(msg *events.NodeShutdownMessage) *AgbotShutdownComm
 	}
 }
 
-// ==============================================================================================================
-type CacheServicePolicyCommand struct {
-	Msg events.CacheServicePolicyMessage
-}
+// // ==============================================================================================================
+// type CacheServicePolicyCommand struct {
+// 	Msg events.CacheServicePolicyMessage
+// }
 
-func (e CacheServicePolicyCommand) ShortString() string {
-	return e.Msg.ShortString()
-}
+// func (e CacheServicePolicyCommand) ShortString() string {
+// 	return e.Msg.ShortString()
+// }
 
-func NewCacheServicePolicyCommand(msg *events.CacheServicePolicyMessage) *CacheServicePolicyCommand {
-	return &CacheServicePolicyCommand{
-		Msg: *msg,
-	}
-}
+// func NewCacheServicePolicyCommand(msg *events.CacheServicePolicyMessage) *CacheServicePolicyCommand {
+// 	return &CacheServicePolicyCommand{
+// 		Msg: *msg,
+// 	}
+// }
 
 // ==============================================================================================================
 type ServicePolicyChangedCommand struct {
-	Msg events.ServicePolicyChangedMessage
+	Org       string
+	Name      string
+	Nodes []string
 }
 
 func (e ServicePolicyChangedCommand) ShortString() string {
-	return e.Msg.ShortString()
+	return fmt.Sprintf("%v", e)
 }
 
-func NewServicePolicyChangedCommand(msg *events.ServicePolicyChangedMessage) *ServicePolicyChangedCommand {
+func NewServicePolicyChangedCommand(org string, polName string, nodes []string) *ServicePolicyChangedCommand {
 	return &ServicePolicyChangedCommand{
-		Msg: *msg,
+		Org:       org,
+		Name:      polName,
+		Nodes: nodes,
 	}
 }
 
@@ -341,8 +365,12 @@ func NewObjectPoliciesChangeCommand(msg *events.MMSObjectPoliciesMessage) *Objec
 type ServedPatternCommand struct {
 }
 
-func (e ServedPatternCommand) ShortString() string {
+func (e ServedPatternCommand) String() string {
 	return "ServedPatternCommand"
+}
+
+func (e ServedPatternCommand) ShortString() string {
+	return e.String()
 }
 
 func NewServedPatternCommand() *ServedPatternCommand {
@@ -353,10 +381,44 @@ func NewServedPatternCommand() *ServedPatternCommand {
 type ServedPolicyCommand struct {
 }
 
-func (e ServedPolicyCommand) ShortString() string {
+func (e ServedPolicyCommand) String() string {
 	return "ServedPolicyCommand"
+}
+
+func (e ServedPolicyCommand) ShortString() string {
+	return e.String()
 }
 
 func NewServedPolicyCommand() *ServedPolicyCommand {
 	return &ServedPolicyCommand{}
+}
+
+// ==============================================================================================================
+type NodeChangeCommand struct {
+	Msg events.ExchangeChangeMessage
+}
+
+func (e NodeChangeCommand) ShortString() string {
+	return e.Msg.ShortString()
+}
+
+func NewNodeChangeCommand(msg *events.ExchangeChangeMessage) *NodeChangeCommand {
+	return &NodeChangeCommand{
+		Msg: *msg,
+	}
+}
+
+// ==============================================================================================================
+type NodePolicyChangeCommand struct {
+	Msg events.ExchangeChangeMessage
+}
+
+func (e NodePolicyChangeCommand) ShortString() string {
+	return e.Msg.ShortString()
+}
+
+func NewNodePolicyChangeCommand(msg *events.ExchangeChangeMessage) *NodePolicyChangeCommand {
+	return &NodePolicyChangeCommand{
+		Msg: *msg,
+	}
 }

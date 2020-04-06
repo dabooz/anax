@@ -56,13 +56,13 @@ const (
 	IMAGE_LOAD_FAILED   EventId = "IMAGE_LOAD_FAILED"
 
 	// policy-related
-	NEW_POLICY             EventId = "NEW_POLICY"
-	UPDATE_POLICY          EventId = "UPDATE_POLICY"
-	CHANGED_POLICY         EventId = "CHANGED_POLICY"
-	DELETED_POLICY         EventId = "DELETED_POLICY"
-	CACHE_SERVICE_POLICY   EventId = "CACHE_SERVICE_POLICY"
-	SERVICE_POLICY_CHANGED EventId = "SERVICE_POLICY_CHANGED"
-	SERVICE_POLICY_DELETED EventId = "SERVICE_POLICY_DELETED"
+	NEW_POLICY    EventId = "NEW_POLICY"
+	UPDATE_POLICY EventId = "UPDATE_POLICY"
+	//	CHANGED_POLICY         EventId = "CHANGED_POLICY"
+	DELETED_POLICY EventId = "DELETED_POLICY"
+	//	CACHE_SERVICE_POLICY   EventId = "CACHE_SERVICE_POLICY"
+	//	SERVICE_POLICY_CHANGED EventId = "SERVICE_POLICY_CHANGED"
+	//	SERVICE_POLICY_DELETED EventId = "SERVICE_POLICY_DELETED"
 
 	// exchange-related
 	NEW_DEVICE_REG             EventId = "NEW_DEVICE_REG"
@@ -432,105 +432,105 @@ func NewUpdatePolicyMessage(id EventId) *UpdatePolicyMessage {
 	}
 }
 
-// This event indicates that a policy file has changed. It might also be a new policy file in the agbot.
-type PolicyChangedMessage struct {
-	event    Event
-	fileName string
-	name     string
-	policy   string
-	org      string
-}
+// // This event indicates that a policy file has changed. It might also be a new policy file in the agbot.
+// type PolicyChangedMessage struct {
+// 	event    Event
+// 	fileName string
+// 	name     string
+// 	policy   string
+// 	org      string
+// }
 
-func (e PolicyChangedMessage) String() string {
-	return fmt.Sprintf("event: %v, file: %v, name: %v, org: %v, policy: %v", e.event, e.fileName, e.name, e.org, e.policy)
-}
+// func (e PolicyChangedMessage) String() string {
+// 	return fmt.Sprintf("event: %v, file: %v, name: %v, org: %v, policy: %v", e.event, e.fileName, e.name, e.org, e.policy)
+// }
 
-func (e PolicyChangedMessage) ShortString() string {
-	return e.String()
-}
+// func (e PolicyChangedMessage) ShortString() string {
+// 	return e.String()
+// }
 
-func (e *PolicyChangedMessage) Event() Event {
-	return e.event
-}
+// func (e *PolicyChangedMessage) Event() Event {
+// 	return e.event
+// }
 
-func (e *PolicyChangedMessage) PolicyFile() string {
-	return e.fileName
-}
+// func (e *PolicyChangedMessage) PolicyFile() string {
+// 	return e.fileName
+// }
 
-func (e *PolicyChangedMessage) PolicyName() string {
-	return e.name
-}
+// func (e *PolicyChangedMessage) PolicyName() string {
+// 	return e.name
+// }
 
-func (e *PolicyChangedMessage) Org() string {
-	return e.org
-}
+// func (e *PolicyChangedMessage) Org() string {
+// 	return e.org
+// }
 
-func (e *PolicyChangedMessage) PolicyString() string {
-	return e.policy
-}
+// func (e *PolicyChangedMessage) PolicyString() string {
+// 	return e.policy
+// }
 
-func NewPolicyChangedMessage(id EventId, policyFileName string, policyName string, org string, policy string) *PolicyChangedMessage {
+// func NewPolicyChangedMessage(id EventId, policyFileName string, policyName string, org string, policy string) *PolicyChangedMessage {
 
-	return &PolicyChangedMessage{
-		event: Event{
-			Id: id,
-		},
-		fileName: policyFileName,
-		name:     policyName,
-		policy:   policy,
-		org:      org,
-	}
-}
+// 	return &PolicyChangedMessage{
+// 		event: Event{
+// 			Id: id,
+// 		},
+// 		fileName: policyFileName,
+// 		name:     policyName,
+// 		policy:   policy,
+// 		org:      org,
+// 	}
+// }
 
-// This event indicates that a policy file was deleted.
-type PolicyDeletedMessage struct {
-	event    Event
-	fileName string
-	name     string
-	policy   string
-	org      string
-}
+// // This event indicates that a policy file was deleted.
+// type PolicyDeletedMessage struct {
+// 	event    Event
+// 	fileName string
+// 	name     string
+// 	policy   string
+// 	org      string
+// }
 
-func (e PolicyDeletedMessage) String() string {
-	return fmt.Sprintf("event: %v, file: %v, name: %v, org: %v, policy: %v", e.event, e.fileName, e.name, e.org, e.policy)
-}
+// func (e PolicyDeletedMessage) String() string {
+// 	return fmt.Sprintf("event: %v, file: %v, name: %v, org: %v, policy: %v", e.event, e.fileName, e.name, e.org, e.policy)
+// }
 
-func (e PolicyDeletedMessage) ShortString() string {
-	return e.String()
-}
+// func (e PolicyDeletedMessage) ShortString() string {
+// 	return e.String()
+// }
 
-func (e *PolicyDeletedMessage) Event() Event {
-	return e.event
-}
+// func (e *PolicyDeletedMessage) Event() Event {
+// 	return e.event
+// }
 
-func (e *PolicyDeletedMessage) PolicyFile() string {
-	return e.fileName
-}
+// func (e *PolicyDeletedMessage) PolicyFile() string {
+// 	return e.fileName
+// }
 
-func (e *PolicyDeletedMessage) PolicyName() string {
-	return e.name
-}
+// func (e *PolicyDeletedMessage) PolicyName() string {
+// 	return e.name
+// }
 
-func (e *PolicyDeletedMessage) Org() string {
-	return e.org
-}
+// func (e *PolicyDeletedMessage) Org() string {
+// 	return e.org
+// }
 
-func (e *PolicyDeletedMessage) PolicyString() string {
-	return e.policy
-}
+// func (e *PolicyDeletedMessage) PolicyString() string {
+// 	return e.policy
+// }
 
-func NewPolicyDeletedMessage(id EventId, policyFileName string, policyName string, org string, policy string) *PolicyDeletedMessage {
+// func NewPolicyDeletedMessage(id EventId, policyFileName string, policyName string, org string, policy string) *PolicyDeletedMessage {
 
-	return &PolicyDeletedMessage{
-		event: Event{
-			Id: id,
-		},
-		fileName: policyFileName,
-		name:     policyName,
-		policy:   policy,
-		org:      org,
-	}
-}
+// 	return &PolicyDeletedMessage{
+// 		event: Event{
+// 			Id: id,
+// 		},
+// 		fileName: policyFileName,
+// 		name:     policyName,
+// 		policy:   policy,
+// 		org:      org,
+// 	}
+// }
 
 // This event indicates that the business policy manager should cache the given service policy
 type CacheServicePolicyMessage struct {

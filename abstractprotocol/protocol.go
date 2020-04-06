@@ -88,7 +88,7 @@ type ProtocolHandler interface {
 	// Base protocol handler methods. These are implemented by the abstract interface.
 	Name() string
 	Version() int
-	PolicyManager() *policy.PolicyManager
+	PolicyManager() policy.IPolicyManager
 	HTTPClient() *http.Client
 
 	// Protocol methods that the handler has to implement
@@ -169,7 +169,7 @@ type BaseProtocolHandler struct {
 	name       string
 	version    int
 	httpClient *http.Client
-	pm         *policy.PolicyManager
+	pm         policy.IPolicyManager
 }
 
 func (bp *BaseProtocolHandler) Name() string {
@@ -180,7 +180,7 @@ func (bp *BaseProtocolHandler) Version() int {
 	return bp.version
 }
 
-func (bp *BaseProtocolHandler) PolicyManager() *policy.PolicyManager {
+func (bp *BaseProtocolHandler) PolicyManager() policy.IPolicyManager {
 	return bp.pm
 }
 
@@ -188,7 +188,7 @@ func (bp *BaseProtocolHandler) HTTPClient() *http.Client {
 	return bp.httpClient
 }
 
-func NewBaseProtocolHandler(n string, v int, h *http.Client, p *policy.PolicyManager) *BaseProtocolHandler {
+func NewBaseProtocolHandler(n string, v int, h *http.Client, p policy.IPolicyManager) *BaseProtocolHandler {
 	return &BaseProtocolHandler{
 		name:       n,
 		version:    v,
@@ -233,17 +233,17 @@ func SendProposal(p ProtocolHandler,
 	messageTarget interface{},
 	sendMessage func(msgTarget interface{}, pay []byte) error) error {
 
-	// Tell the policy manager that we're going to attempt an agreement
-	if err := p.PolicyManager().AttemptingAgreement([]policy.Policy{*consumerPolicy}, newProposal.AgreementId(), org); err != nil {
-		glog.Errorf(AAPlogString(p.Name(), fmt.Sprintf("error saving agreement count: %v", err)))
-	}
+	// // Tell the policy manager that we're going to attempt an agreement
+	// if err := p.PolicyManager().AttemptingAgreement([]policy.Policy{*consumerPolicy}, newProposal.AgreementId(), org); err != nil {
+	// 	glog.Errorf(AAPlogString(p.Name(), fmt.Sprintf("error saving agreement count: %v", err)))
+	// }
 
 	// Send a message to the device to initiate the agreement protocol.
 	if err := SendProtocolMessage(messageTarget, newProposal, sendMessage); err != nil {
-		// Tell the policy manager that we're not attempting an agreement
-		if perr := p.PolicyManager().CancelAgreement([]policy.Policy{*consumerPolicy}, newProposal.AgreementId(), org); perr != nil {
-			glog.Errorf(AAPlogString(p.Name(), fmt.Sprintf("error saving agreement count: %v", perr)))
-		}
+		// // Tell the policy manager that we're not attempting an agreement
+		// if perr := p.PolicyManager().CancelAgreement([]policy.Policy{*consumerPolicy}, newProposal.AgreementId(), org); perr != nil {
+		// 	glog.Errorf(AAPlogString(p.Name(), fmt.Sprintf("error saving agreement count: %v", perr)))
+		// }
 		return errors.New(fmt.Sprintf("Protocol %v error sending proposal %v, %v", p.Name(), newProposal, err))
 	} else {
 		return nil
@@ -251,7 +251,7 @@ func SendProposal(p ProtocolHandler,
 
 }
 
-// Decide to accept or reject a proposal based on whether the proposal is acceptable and agreement limits have not been hit.
+// Decide to accept or reject a proposal based on whether the proposal is acceptable.
 func DecideOnProposal(p ProtocolHandler,
 	proposal Proposal,
 	nodePolicy *externalpolicy.ExternalPolicy,
@@ -289,13 +289,13 @@ func DecideOnProposal(p ProtocolHandler,
 	policies, err := p.PolicyManager().GetPolicyList(myOrg, producerPolicy)
 	if err != nil {
 		replyErr = errors.New(fmt.Sprintf("Protocol %v decide on proposal received error getting policy list: %v", p.Name(), err))
-	} else if err := p.PolicyManager().AttemptingAgreement(policies, proposal.AgreementId(), myOrg); err != nil {
-		replyErr = errors.New(fmt.Sprintf("Protocol %v decide on proposal received error saving agreement count: %v", p.Name(), err))
+		// } else if err := p.PolicyManager().AttemptingAgreement(policies, proposal.AgreementId(), myOrg); err != nil {
+		// 	replyErr = errors.New(fmt.Sprintf("Protocol %v decide on proposal received error saving agreement count: %v", p.Name(), err))
 	}
 
 	// The consumer will send 2 policies, one is the merged policy that represents the
-	// terms and conditions of the agreement. The other is a copy of my policy that he/she thinks
-	// he/she is matching. Let's make sure it is one of my policies or a valid merger of my policies.
+	// terms and conditions of the agreement. The other is a copy of the node policy that was
+	// matched when the proposal was created. Make sure it is a node policy or a valid merger of the node policies.
 	// In the case of services, the agreement service might not have any dependent services and
 	// therefore, there is no producer policy (or it is empty).
 	if replyErr == nil {
@@ -309,17 +309,17 @@ func DecideOnProposal(p ProtocolHandler,
 			replyErr = errors.New(fmt.Sprintf("Protocol %v error verifying merged policy %v and %v, error: %v", p.Name(), mergedPolicy, producerPolicy, err))
 
 			// And make sure we havent exceeded the maxAgreements in any of our policies.
-		} else if maxedOut, err := p.PolicyManager().ReachedMaxAgreements(policies, myOrg); maxedOut {
-			replyErr = errors.New(fmt.Sprintf("Protocol %v max agreements reached: %v", p.Name(), p.PolicyManager().AgreementCountString()))
-		} else if err != nil {
-			replyErr = errors.New(fmt.Sprintf("Protocol %v decide on proposal received error getting number of agreements, rejecting proposal: %v", p.Name(), err))
+			// } else if maxedOut, err := p.PolicyManager().ReachedMaxAgreements(policies, myOrg); maxedOut {
+			// 	replyErr = errors.New(fmt.Sprintf("Protocol %v max agreements reached: %v", p.Name(), p.PolicyManager().AgreementCountString()))
+			// } else if err != nil {
+			// 	replyErr = errors.New(fmt.Sprintf("Protocol %v decide on proposal received error getting number of agreements, rejecting proposal: %v", p.Name(), err))
 
 			// Now check to make sure that the merged policy is acceptable. The policy is not acceptable if the terms and conditions are not
 			// compatible with the producer's policy.
 		} else if err := policy.Are_Compatible(producerPolicy, termsAndConditions, nil); err != nil {
 			replyErr = errors.New(fmt.Sprintf("Protocol %v decide on proposal received error, T and C policy is not compatible, rejecting proposal: %v", p.Name(), err))
-		} else if err := p.PolicyManager().FinalAgreement(policies, proposal.AgreementId(), myOrg); err != nil {
-			replyErr = errors.New(fmt.Sprintf("Protocol %v decide on proposal received error, unable to record agreement state in PM: %v", p.Name(), err))
+			// } else if err := p.PolicyManager().FinalAgreement(policies, proposal.AgreementId(), myOrg); err != nil {
+			// 	replyErr = errors.New(fmt.Sprintf("Protocol %v decide on proposal received error, unable to record agreement state in PM: %v", p.Name(), err))
 		} else {
 			reply.AcceptProposal()
 		}
@@ -343,17 +343,17 @@ func SendResponse(p ProtocolHandler,
 		replyErr = errors.New(fmt.Sprintf("Protocol %v decide on proposal received error trying to send proposal response, error: %v", p.Name(), err))
 	}
 
-	// Log any error that occurred along the way and return it. Make sure the policy manager counts are kept in sync.
+	// Log any error that occurred along the way and return it.
 	if replyErr != nil {
 		glog.Errorf(AAPlogString(p.Name(), replyErr.Error()))
-		producerPolicy, _ := policy.DemarshalPolicy(proposal.ProducerPolicy())
-		if producerPolicy != nil {
-			if policies, err := p.PolicyManager().GetPolicyList(myOrg, producerPolicy); err != nil {
-				glog.Errorf(AAPlogString(p.Name(), fmt.Sprintf("Error getting policy list: %v for agreement %v", err, proposal.AgreementId())))
-			} else if cerr := p.PolicyManager().CancelAgreement(policies, proposal.AgreementId(), myOrg); cerr != nil {
-				glog.Errorf(AAPlogString(p.Name(), fmt.Sprintf("Error cancelling agreement %v in PM %v", proposal.AgreementId(), cerr)))
-			}
-		}
+		// producerPolicy, _ := policy.DemarshalPolicy(proposal.ProducerPolicy())
+		// if producerPolicy != nil {
+		// 	if policies, err := p.PolicyManager().GetPolicyList(myOrg, producerPolicy); err != nil {
+		// 		glog.Errorf(AAPlogString(p.Name(), fmt.Sprintf("Error getting policy list: %v for agreement %v", err, proposal.AgreementId())))
+		// 	} else if cerr := p.PolicyManager().CancelAgreement(policies, proposal.AgreementId(), myOrg); cerr != nil {
+		// 		glog.Errorf(AAPlogString(p.Name(), fmt.Sprintf("Error cancelling agreement %v in PM %v", proposal.AgreementId(), cerr)))
+		// 	}
+		// }
 		return nil, replyErr
 	}
 
@@ -431,8 +431,9 @@ func RecordAgreement(p ProtocolHandler,
 	consumerPolicy *policy.Policy,
 	org string) error {
 
-	// Tell the policy manager that we're in this agreement
-	return p.PolicyManager().FinalAgreement([]policy.Policy{*consumerPolicy}, newProposal.AgreementId(), org)
+	// // Tell the policy manager that we're in this agreement
+	// return p.PolicyManager().FinalAgreement([]policy.Policy{*consumerPolicy}, newProposal.AgreementId(), org)
+	return nil
 
 }
 
@@ -442,8 +443,9 @@ func TerminateAgreement(p ProtocolHandler,
 	org string,
 	reason uint) error {
 
-	// Tell the policy manager that we're terminating this agreement
-	return p.PolicyManager().CancelAgreement(policies, agreementId, org)
+	// // Tell the policy manager that we're terminating this agreement
+	// return p.PolicyManager().CancelAgreement(policies, agreementId, org)
+	return nil
 
 }
 

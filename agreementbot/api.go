@@ -193,6 +193,8 @@ func (a *API) listen(apiListen string) {
 		router.HandleFunc("/status/workers", a.workerstatus).Methods("GET", "OPTIONS")
 		router.HandleFunc("/node", a.node).Methods("GET", "DELETE", "OPTIONS")
 		router.HandleFunc("/config", a.config).Methods("GET", "OPTIONS")
+		// TODO: Add function to cause agbot to do findAllAndMakePolicyAgreements()
+		// TODO: Add function to dump match cache and BPolMgr
 
 		if err := http.ListenAndServe(apiListen, nocache(router)); err != nil {
 			glog.Fatalf(APIlogString(fmt.Sprintf("failed to start listener on %v, error %v", apiListen, err)))
@@ -307,6 +309,9 @@ func (a *API) policy(w http.ResponseWriter, r *http.Request) {
 		name := pathVars["name"]
 
 		// get a list of hosted policy names
+
+		// TODO: Remove the use of Initialize here and further down, and then delete it and policy change watcher
+
 		if pm, err := policy.Initialize(a.Config.AgreementBot.PolicyPath, a.Config.ArchSynonyms, serviceResolver, false, false); err != nil {
 			glog.Error(APIlogString(fmt.Sprintf("error initializing policy manager, error: %v", err)))
 			w.WriteHeader(http.StatusInternalServerError)

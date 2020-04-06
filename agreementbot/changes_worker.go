@@ -86,12 +86,8 @@ func (w *ChangesWorker) NewEvent(incoming events.Message) {
 // Handle commands that are placed on the command queue.
 func (w *ChangesWorker) CommandHandler(command worker.Command) bool {
 
-	// Be sure to call findAndProcessChanges() if it hasnt been called in a while.
-	// switch command.(type) {
-
-	// default:
-	// 	return false
-	// }
+	// If commands are added to this handler in the future, be sure to call findAndProcessChanges()
+	// if it hasnt been called within the default time interval.
 
 	return true
 
@@ -152,6 +148,21 @@ func (w *ChangesWorker) findAndProcessChanges() {
 
 		} else if change.IsServicePolicy() {
 			ev := events.NewExchangeChangeMessage(events.CHANGE_SERVICE_POLICY_TYPE)
+			ev.SetChange(change)
+			w.Messages() <- ev
+
+		} else if change.IsNodePolicy("") {
+			ev := events.NewExchangeChangeMessage(events.CHANGE_NODE_POLICY_TYPE)
+			ev.SetChange(change)
+			w.Messages() <- ev
+
+		} else if change.IsNode("") {
+			ev := events.NewExchangeChangeMessage(events.CHANGE_NODE_TYPE)
+			ev.SetChange(change)
+			w.Messages() <- ev
+
+		} else if change.IsNodeAgreement("") {
+			ev := events.NewExchangeChangeMessage(events.CHANGE_NODE_TYPE)
 			ev.SetChange(change)
 			w.Messages() <- ev
 
@@ -223,9 +234,6 @@ func (w *ChangesWorker) gatherServedOrgs(change *exchange.ExchangeChange) []stri
 
 	// Collect the served orgs in a map so that it's easier to handle duplicate org names.
 	orgs := make(map[string]bool)
-
-	// The map always includes the agbot's org.
-	orgs[exchange.GetOrg(w.GetExchangeId())] = true
 
 	// Get the orgs related to serving policies, and verify that the org exists in the exchange.
 	if pols, err := exchange.GetHTTPAgbotServedDeploymentPolicy(w)(); err != nil {

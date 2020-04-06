@@ -191,6 +191,19 @@ func (self PropertyList) GetProperty(name string) (Property, error) {
 	return Property{}, fmt.Errorf("Error: property %s not found in list %v.", name, self)
 }
 
+func (self PropertyList) RemoveProperty(name string) PropertyList {
+	nl := make(PropertyList, 0, 10)
+	for ix, ele := range self {
+		if ele.Name == name {
+			nl = append(nl, self[:ix]...)
+			nl = append(nl, self[ix+1:]...)
+			return nl
+		}
+	}
+	nl = append(nl, self...)
+	return nl
+}
+
 // Validate will return an error if any property in the list has an invalid format or a value that does not match a declared type
 func (self *PropertyList) Validate() error {
 	// get message printer because this function is called by CLI

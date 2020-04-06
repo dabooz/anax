@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/golang/glog"
 	"github.com/open-horizon/anax/abstractprotocol"
+	"github.com/open-horizon/anax/agreementbot/matchcache"
 	"github.com/open-horizon/anax/agreementbot/persistence"
 	"github.com/open-horizon/anax/basicprotocol"
 	"github.com/open-horizon/anax/config"
@@ -23,7 +24,7 @@ type BasicProtocolHandler struct {
 	Work        *PrioritizedWorkQueue
 }
 
-func NewBasicProtocolHandler(name string, cfg *config.HorizonConfig, db persistence.AgbotDatabase, pm *policy.PolicyManager, messages chan events.Message, mmsObjMgr *MMSObjectPolicyManager) *BasicProtocolHandler {
+func NewBasicProtocolHandler(name string, cfg *config.HorizonConfig, db persistence.AgbotDatabase, pm policy.IPolicyManager, messages chan events.Message, mmsObjMgr *MMSObjectPolicyManager, matchCache *matchcache.MatchCache, depPolMgr *BusinessPolicyManager) *BasicProtocolHandler {
 	if name == basicprotocol.PROTOCOL_NAME {
 		return &BasicProtocolHandler{
 			BaseConsumerProtocolHandler: &BaseConsumerProtocolHandler{
@@ -37,6 +38,8 @@ func NewBasicProtocolHandler(name string, cfg *config.HorizonConfig, db persiste
 				deferredCommands: nil,
 				messages:         messages,
 				mmsObjMgr:        mmsObjMgr,
+				matchCache:       matchCache,
+				depPolicyMgr:     depPolMgr,
 			},
 			agreementPH: basicprotocol.NewProtocolHandler(cfg.Collaborators.HTTPClientFactory.NewHTTPClient(nil), pm),
 			// Allow the main agbot thread to distribute protocol msgs and agreement handling to the worker pool.
@@ -66,7 +69,7 @@ func (c *BasicProtocolHandler) Initialize() {
 
 	// Set up agreement worker pool based on the current technical config.
 	for ix := 0; ix < c.config.AgreementBot.AgreementWorkers; ix++ {
-		agw := NewBasicAgreementWorker(c, c.config, c.db, c.pm, agreementLockMgr, c.mmsObjMgr)
+		agw := NewBasicAgreementWorker(c, c.config, c.db, c.pm, agreementLockMgr, c.mmsObjMgr, c.matchCache, c.depPolicyMgr)
 		go agw.start(c.Work, random)
 	}
 
@@ -95,6 +98,8 @@ func (c *BasicProtocolHandler) AcceptCommand(cmd worker.Command) bool {
 	case *ServicePolicyChangedCommand:
 		return true
 	case *ServicePolicyDeletedCommand:
+		return true
+	case *NodePolicyChangedCommand:
 		return true
 	case *WorkloadUpgradeCommand:
 		return true

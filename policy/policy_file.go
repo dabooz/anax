@@ -121,6 +121,44 @@ func (self *Policy) DeepCopy() *Policy {
 	return newPolicy
 }
 
+// TODO: Still needed?
+// This function returns no error if the policies are the same.
+func (self *Policy) IsSame(matchPolicy *Policy) error {
+
+	if !self.Header.IsSame(matchPolicy.Header) {
+		return errors.New(fmt.Sprintf("Header %v mismatch with %v", self.Header, matchPolicy.Header))
+
+	} else if (len(matchPolicy.Workloads) == 0 || (len(matchPolicy.Workloads) != 0 && matchPolicy.Workloads[0].WorkloadURL == "")) && !self.APISpecs.IsSame(matchPolicy.APISpecs, true) {
+		return errors.New(fmt.Sprintf("API Spec %v mismatch with %v", self.APISpecs, matchPolicy.APISpecs))
+
+	} else if !self.AgreementProtocols.IsSame(matchPolicy.AgreementProtocols) {
+		return errors.New(fmt.Sprintf("AgreementProtocol %v mismatch with %v", self.AgreementProtocols, matchPolicy.AgreementProtocols))
+
+		// } else if !self.IsSameWorkload(matchPolicy) {
+		// 	return errors.New(fmt.Sprintf("Workload %v mismatch with %v", self.Workloads, matchPolicy.Workloads))
+
+	} else if !self.DataVerify.IsSame(matchPolicy.DataVerify) {
+		return errors.New(fmt.Sprintf("DataVerify %v mismatch with %v", self.DataVerify, matchPolicy.DataVerify))
+
+	} else if !self.Properties.IsSame(matchPolicy.Properties) {
+		return errors.New(fmt.Sprintf("Properties %v mismatch with %v", self.Properties, matchPolicy.Properties))
+
+	} else if !self.Constraints.IsSame(matchPolicy.Constraints) {
+		return errors.New(fmt.Sprintf("Constraints %v mismatch with %v", self.Constraints, matchPolicy.Constraints))
+
+	} else if self.RequiredWorkload != matchPolicy.RequiredWorkload {
+		return errors.New(fmt.Sprintf("RequiredWorkload %v mismatch with %v", self.RequiredWorkload, matchPolicy.RequiredWorkload))
+
+	} else if self.MaxAgreements != matchPolicy.MaxAgreements {
+		return errors.New(fmt.Sprintf("MaxAgreement %v mismatch with %v", self.MaxAgreements, matchPolicy.MaxAgreements))
+
+	} else if !UserInputArrayIsSame(self.UserInput, matchPolicy.UserInput) {
+		return errors.New(fmt.Sprintf("UserInput %v mismatch with %v", self.UserInput, matchPolicy.UserInput))
+	}
+
+	return nil
+}
+
 func (self *Policy) Add_API_Spec(spec *APISpecification) error {
 	if spec != nil {
 		return self.APISpecs.Add_API_Spec(spec)

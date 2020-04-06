@@ -76,7 +76,7 @@ type ProtocolHandler struct {
 	*abstractprotocol.BaseProtocolHandler
 }
 
-func NewProtocolHandler(httpClient *http.Client, pm *policy.PolicyManager) *ProtocolHandler {
+func NewProtocolHandler(httpClient *http.Client, pm policy.IPolicyManager) *ProtocolHandler {
 
 	bph := abstractprotocol.NewBaseProtocolHandler(PROTOCOL_NAME,
 		PROTOCOL_CURRENT_VERSION,

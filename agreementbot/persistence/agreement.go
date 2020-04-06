@@ -10,7 +10,7 @@ import (
 type Agreement struct {
 	CurrentAgreementId             string   `json:"current_agreement_id"`              // unique
 	Org                            string   `json:"org"`                               // the org in which the policy exists that was used to make this agreement
-	DeviceId                       string   `json:"device_id"`                         // the device id we are working with, immutable after construction
+	DeviceId                       string   `json:"device_id"`                         // the device id we are working with, immutable after construction. It is a fully qualified name.
 	HAPartners                     []string `json:"ha_partners"`                       // list of HA partner device IDs
 	AgreementProtocol              string   `json:"agreement_protocol"`                // immutable after construction - name of protocol in use
 	AgreementProtocolVersion       int      `json:"agreement_protocol_version"`        // version of protocol in use - New in V2 protocol
@@ -23,7 +23,7 @@ type Agreement struct {
 	ProposalHash                   string   `json:"proposal_hash"`                     // Hash of the proposal
 	ConsumerProposalSig            string   `json:"consumer_proposal_sig"`             // Consumer's signature of the proposal
 	Policy                         string   `json:"policy"`                            // JSON serialization of the policy used to make the proposal
-	PolicyName                     string   `json:"policy_name"`                       // The name of the policy for this agreement, policy names are unique
+	PolicyName                     string   `json:"policy_name"`                       // The name of the policy for this agreement, policy names are unique. It is an org qualified name.
 	CounterPartyAddress            string   `json:"counter_party_address"`             // The blockchain address of the counterparty in the agreement
 	DataVerificationURL            string   `json:"data_verification_URL"`             // The URL to use to ensure that this agreement is sending data.
 	DataVerificationUser           string   `json:"data_verification_user"`            // The user to use with the DataVerificationURL

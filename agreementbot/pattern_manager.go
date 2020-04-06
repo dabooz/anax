@@ -14,23 +14,23 @@ import (
 )
 
 type PatternEntry struct {
-	Pattern         *exchange.Pattern `json:"pattern,omitempty"`         // the metadata for this pattern from the exchange
-	Updated         uint64            `json:"updatedTime,omitempty"`     // the time when this entry was updated
-	Hash            []byte            `json:"hash,omitempty"`            // a hash of the current entry to compare for matadata changes in the exchange
-	PolicyFileNames []string          `json:"policyFileNames,omitempty"` // the list of policy names generated for this pattern
+	Pattern  *exchange.Pattern // The pattern definition from the exchange.
+	Updated  uint64            // The (epoch) time when this entry was updated.
+	Hash     []byte            // A hash of the current entry to compare for changes in the future.
+	Policies []*policy.Policy  // The list of policies generated for this pattern.
 }
 
 func (p *PatternEntry) String() string {
 	return fmt.Sprintf("Pattern Entry: "+
 		"Updated: %v "+
 		"Hash: %x "+
-		"Files: %v"+
+		"Policies: %v"+
 		"Pattern: %v",
-		p.Updated, p.Hash, p.PolicyFileNames, p.Pattern)
+		p.Updated, p.Hash, p.Policies, p.Pattern)
 }
 
 func (p *PatternEntry) ShortString() string {
-	return fmt.Sprintf("Files: %v", p.PolicyFileNames)
+	return fmt.Sprintf("Policies: %v", p.Policies)
 }
 
 func hashPattern(p *exchange.Pattern) ([]byte, error) {
@@ -51,43 +51,41 @@ func NewPatternEntry(p *exchange.Pattern) (*PatternEntry, error) {
 	} else {
 		pe.Hash = hash
 	}
-	pe.PolicyFileNames = make([]string, 0, 10)
+	pe.Policies = make([]*policy.Policy, 0, 10)
 	return pe, nil
 }
 
-func (pe *PatternEntry) AddPolicyFileName(fileName string) {
-	pe.PolicyFileNames = append(pe.PolicyFileNames, fileName)
+func (pe *PatternEntry) AddPolicy(p *policy.Policy) {
+	pe.Policies = append(pe.Policies, p)
 }
 
-func (pe *PatternEntry) DeleteAllPolicyFiles(policyPath string, org string) error {
-
-	for _, fileName := range pe.PolicyFileNames {
-		if err := policy.DeletePolicyFile(fileName); err != nil {
-			return err
-		}
-	}
-	return nil
+func (pe *PatternEntry) DeleteAllPolicies() {
+	pe.Policies = make([]*policy.Policy, 0, 10)
 }
 
 func (pe *PatternEntry) UpdateEntry(pattern *exchange.Pattern, newHash []byte) {
 	pe.Pattern = pattern
 	pe.Hash = newHash
 	pe.Updated = uint64(time.Now().Unix())
-	pe.PolicyFileNames = make([]string, 0, 10)
+	pe.Policies = make([]*policy.Policy, 0, 10)
 }
 
 type PatternManager struct {
-	spMapLock      sync.Mutex                          // The lock that protects the map of ServedPatterns because it is referenced from another thread.
-	ServedPatterns map[string]exchange.ServedPattern   // served node org, pattern org and pattern triplets
-	OrgPatterns    map[string]map[string]*PatternEntry // all served paterns by this agbot
+	spMapLock      sync.Mutex                          // The lock that protects the map of ServedPatterns.
+	ServedPatterns map[string]exchange.ServedPattern   // The served node org, pattern org and pattern triplets.
+	patMapLock     sync.Mutex                          // The lock that protects the map of patterns.
+	OrgPatterns    map[string]map[string]*PatternEntry // All patterns served by this agbot.
 }
 
 func (pm *PatternManager) String() string {
+	pm.patMapLock.Lock()
+	defer pm.patMapLock.Unlock()
+
 	res := "Pattern Manager: "
 	for org, orgMap := range pm.OrgPatterns {
 		res += fmt.Sprintf("Org: %v ", org)
 		for pat, pe := range orgMap {
-			res += fmt.Sprintf("Pattern: %v %v ", pat, pe)
+			res += fmt.Sprintf("Pattern: %v %v\n", pat, pe)
 		}
 	}
 
@@ -100,9 +98,13 @@ func (pm *PatternManager) String() string {
 	return res
 }
 
-func (p *PatternManager) ShortString() string {
+func (pm *PatternManager) ShortString() string {
+
+	pm.patMapLock.Lock()
+	defer pm.patMapLock.Unlock()
+
 	res := "Pattern Manager: "
-	for org, orgMap := range p.OrgPatterns {
+	for org, orgMap := range pm.OrgPatterns {
 		res += fmt.Sprintf("Org: %v ", org)
 		for pat, pe := range orgMap {
 			s := ""
@@ -123,17 +125,14 @@ func NewPatternManager() *PatternManager {
 }
 
 func (pm *PatternManager) hasOrg(org string) bool {
-	if _, ok := pm.OrgPatterns[org]; ok {
-		return true
-	}
-	return false
+	_, ok := pm.OrgPatterns[org]
+	return ok
 }
 
 func (pm *PatternManager) hasPattern(org string, pattern string) bool {
 	if pm.hasOrg(org) {
-		if _, ok := pm.OrgPatterns[org][pattern]; ok {
-			return true
-		}
+		_, ok := pm.OrgPatterns[org][pattern]
+		return ok
 	}
 	return false
 }
@@ -144,10 +143,11 @@ func (pm *PatternManager) setServedPatterns(servedPatterns map[string]exchange.S
 	defer pm.spMapLock.Unlock()
 
 	// copy the input map
+	// TODO: Not safe
 	pm.ServedPatterns = servedPatterns
 }
 
-// chek if the agbot serves the given pattern or not.
+// check if the agbot serves the given pattern or not.
 func (pm *PatternManager) servePattern(pattern_org string, pattern string) bool {
 	pm.spMapLock.Lock()
 	defer pm.spMapLock.Unlock()
@@ -160,7 +160,7 @@ func (pm *PatternManager) servePattern(pattern_org string, pattern string) bool 
 	return false
 }
 
-// check if the agbot service the given org or not.
+// check if the agbot serves the given org or not.
 func (pm *PatternManager) serveOrg(pattern_org string) bool {
 	pm.spMapLock.Lock()
 	defer pm.spMapLock.Unlock()
@@ -194,9 +194,12 @@ func (pm *PatternManager) GetServedNodeOrgs(pattten_org string, pattern string) 
 }
 
 // Given a list of pattern_org/pattern/node_org triplets that this agbot is supposed to serve, save that list and
-// convert it to map of maps (keyed by org and pattern name) to hold all the pattern meta data. This
+// convert it to map of maps (keyed by org and pattern name) to hold the pattern definition. This
 // will allow the PatternManager to know when the pattern metadata changes.
-func (pm *PatternManager) SetCurrentPatterns(servedPatterns map[string]exchange.ServedPattern, policyPath string) error {
+func (pm *PatternManager) SetCurrentPatterns(servedPatterns map[string]exchange.ServedPattern) error {
+
+	pm.patMapLock.Lock()
+	defer pm.patMapLock.Unlock()
 
 	// Exit early if nothing to do
 	if len(pm.OrgPatterns) == 0 && len(servedPatterns) == 0 {
@@ -206,7 +209,7 @@ func (pm *PatternManager) SetCurrentPatterns(servedPatterns map[string]exchange.
 	// save the served patterns in the pm
 	pm.setServedPatterns(servedPatterns)
 
-	// Create a new map of maps
+	// If this is the first time to set the served patterns, create a new map of maps.
 	if len(pm.OrgPatterns) == 0 {
 		pm.OrgPatterns = make(map[string]map[string]*PatternEntry)
 	}
@@ -224,9 +227,9 @@ func (pm *PatternManager) SetCurrentPatterns(servedPatterns map[string]exchange.
 	// this agbot is no longer serving any patterns in that org, we can get rid of everything in that org.
 	for org, _ := range pm.OrgPatterns {
 		if !pm.serveOrg(org) {
-			// delete org and all policy files in it.
-			glog.V(5).Infof("Deleting the org %v from the pattern manager and all its policy files because it is no longer hosted by the agbot.", org)
-			if err := pm.deleteOrg(policyPath, org); err != nil {
+			// Delete org and all policies in it.
+			glog.V(5).Infof("Deleting the org %v from the pattern manager and all its policies because it is no longer hosted by the agbot.", org)
+			if err := pm.deleteOrg(org); err != nil {
 				return err
 			}
 		}
@@ -235,41 +238,45 @@ func (pm *PatternManager) SetCurrentPatterns(servedPatterns map[string]exchange.
 	return nil
 }
 
-// Create all the policy files for the input pattern
-func createPolicyFiles(pe *PatternEntry, patternId string, pattern *exchange.Pattern, policyPath string, org string) error {
-	if policies, err := exchange.ConvertToPolicies(patternId, pattern); err != nil {
+// Create all the policies for the input pattern.
+func createPolicies(pe *PatternEntry, patternId string, pattern *exchange.Pattern) error {
+	var err error
+	if pe.Policies, err = exchange.ConvertToPolicies(patternId, pattern); err != nil {
 		return errors.New(fmt.Sprintf("error converting pattern to policies, error %v", err))
-	} else {
-		for _, pol := range policies {
-			if fileName, err := policy.CreatePolicyFile(policyPath, org, pol.Header.Name, pol); err != nil {
-				return errors.New(fmt.Sprintf("error creating policy file, error %v", err))
-			} else {
-				pe.AddPolicyFileName(fileName)
-			}
-		}
+		// } else {
+		// for _, pol := range policies {
+		// if fileName, err := policy.CreatePolicyFile(policyPath, org, pol.Header.Name, pol); err != nil {
+		// 	return errors.New(fmt.Sprintf("error creating policy file, error %v", err))
+		// } else {
+		// pe.Policies = policies
+		// }
+		// }
 	}
 	return nil
 }
 
 // For each org that the agbot is supporting, take the set of patterns defined within the org and save them into
-// the PatternManager. When new or updated patterns are discovered, generate policy files for each pattern so that
+// the PatternManager. When new or updated patterns are discovered, generate policies for each pattern so that
 // the agbot can start serving the workloads and services.
-func (pm *PatternManager) UpdatePatternPolicies(org string, definedPatterns map[string]exchange.Pattern, policyPath string) error {
+func (pm *PatternManager) UpdatePatternPolicies(org string, definedPatterns map[string]exchange.Pattern) error {
+
+	pm.patMapLock.Lock()
+	defer pm.patMapLock.Unlock()
 
 	// Exit early on error
 	if !pm.hasOrg(org) {
 		return errors.New(fmt.Sprintf("org %v not found in pattern manager", org))
 	}
 
-	// If there is no pattern in the org, delete the org from the pm and all of the policy files in the org.
+	// If there is no pattern in the org, delete the org from the pm and all of the policies in the org.
 	// This is the case where pattern or the org has been deleted but the agbot still hosts the pattern on the exchange.
 	if definedPatterns == nil || len(definedPatterns) == 0 {
-		// delete org and all policy files in it.
-		glog.V(5).Infof("Deleting the org %v from the pattern manager and all its policy files because it does not contain a pattern.", org)
-		return pm.deleteOrg(policyPath, org)
+		// Delete org and all policies in it.
+		glog.V(5).Infof("Deleting the org %v from the pattern manager and all its policies because it does not contain a pattern.", org)
+		return pm.deleteOrg(org)
 	}
 
-	// Delete the pattern from the pm and all of its policy files if the pattern does not exist on the exchange or the agbot
+	// Delete the pattern from the pm and all of its policies if the pattern does not exist on the exchange or the agbot
 	// does not serve it any more.
 	for pattern, _ := range pm.OrgPatterns[org] {
 		need_delete := true
@@ -283,8 +290,8 @@ func (pm *PatternManager) UpdatePatternPolicies(org string, definedPatterns map[
 		}
 
 		if need_delete {
-			glog.V(5).Infof("Deleting pattern %v and its policy files from the org %v from the pattern manager because the pattern no longer exists.", pattern, org)
-			if err := pm.deletePattern(policyPath, org, pattern); err != nil {
+			glog.V(5).Infof("Deleting pattern %v and its policies from the org %v because the pattern no longer exists.", pattern, org)
+			if err := pm.deletePattern(org, pattern); err != nil {
 				return err
 			}
 		}
@@ -302,35 +309,31 @@ func (pm *PatternManager) UpdatePatternPolicies(org string, definedPatterns map[
 				need_new_entry = false
 
 				// The PatternEntry is already there, so check if the pattern definition has changed.
-				// If the pattern has changed, recreate all policy files. Otherwise the pattern
-				// definition we have is current.
 				newHash, err := hashPattern(&pattern)
 				if err != nil {
 					return errors.New(fmt.Sprintf("unable to hash pattern %v for %v, error %v", pattern, org, err))
 				}
 				if !bytes.Equal(pe.Hash, newHash) {
-					glog.V(5).Infof("Deleting all the policy files for org %v because the old pattern %v does not match the new pattern %v", org, pe.Pattern, pattern)
-					if err := pe.DeleteAllPolicyFiles(policyPath, org); err != nil {
-						return errors.New(fmt.Sprintf("unable to delete policy files for %v, error %v", org, err))
-					}
+					glog.V(5).Infof("Deleting all the policies for org %v because the old pattern %v does not match the new pattern %v", org, pe.Pattern, pattern)
+					pe.DeleteAllPolicies()
 					pe.UpdateEntry(&pattern, newHash)
-					glog.V(5).Infof("Creating the policy files for pattern %v.", patternId)
-					if err := createPolicyFiles(pe, patternId, &pattern, policyPath, org); err != nil {
-						return errors.New(fmt.Sprintf("unable to create policy files for %v, error %v", pattern, err))
+					glog.V(5).Infof("Creating the policies for pattern %v.", patternId)
+					if err := createPolicies(pe, patternId, &pattern); err != nil {
+						return errors.New(fmt.Sprintf("unable to create policies for %v, error %v", pattern, err))
 					}
 				}
 			}
 		}
 
-		//If there's no PatternEntry yet, create one and then create the policy files.
+		//If there's no PatternEntry yet, create one and then create the policies.
 		if need_new_entry {
 			if newPE, err := NewPatternEntry(&pattern); err != nil {
 				return errors.New(fmt.Sprintf("unable to create pattern entry for %v, error %v", pattern, err))
 			} else {
 				pm.OrgPatterns[org][exchange.GetId(patternId)] = newPE
-				glog.V(5).Infof("Creating the policy files for pattern %v.", patternId)
-				if err := createPolicyFiles(newPE, patternId, &pattern, policyPath, org); err != nil {
-					return errors.New(fmt.Sprintf("unable to create policy files for %v, error %v", pattern, err))
+				glog.V(5).Infof("Creating the policies for pattern %v.", patternId)
+				if err := createPolicies(newPE, patternId, &pattern); err != nil {
+					return errors.New(fmt.Sprintf("unable to create policies for %v, error %v", pattern, err))
 				}
 			}
 		}
@@ -340,13 +343,13 @@ func (pm *PatternManager) UpdatePatternPolicies(org string, definedPatterns map[
 }
 
 // When an org is removed from the list of supported orgs and patterns, remove the org
-// from the PatternManager and delete all the policy files for it.
-func (pm *PatternManager) deleteOrg(policyPath string, org string) error {
+// from the PatternManager.
+func (pm *PatternManager) deleteOrg(org string) error {
 
-	// Delete all the policy files that are pattern based for the org
-	if err := policy.DeletePolicyFilesForOrg(policyPath, org, true); err != nil {
-		glog.Errorf("Error deleting policy files for org %v. %v", org, err)
-	}
+	// // Delete all the policy files that are pattern based for the org
+	// if err := policy.DeletePolicyFilesForOrg(policyPath, org, true); err != nil {
+	// 	glog.Errorf("Error deleting policy files for org %v. %v", org, err)
+	// }
 
 	// Get rid of the org map
 	if pm.hasOrg(org) {
@@ -356,13 +359,13 @@ func (pm *PatternManager) deleteOrg(policyPath string, org string) error {
 	return nil
 }
 
-// When a pattern is removed, remove the pattern from the PatternManager and delete all the policy files for it.
-func (pm *PatternManager) deletePattern(policyPath string, org string, pattern string) error {
+// When a pattern is removed, remove the pattern from the PatternManager.
+func (pm *PatternManager) deletePattern(org string, pattern string) error {
 
-	// delete the policy files
-	if err := policy.DeletePolicyFilesForPattern(policyPath, org, pattern); err != nil {
-		glog.Errorf("Error deleting policy files for pattern %v/%v. %v", org, pattern, err)
-	}
+	// // delete the policy files
+	// if err := policy.DeletePolicyFilesForPattern(org, pattern); err != nil {
+	// 	glog.Errorf("Error deleting policy files for pattern %v/%v. %v", org, pattern, err)
+	// }
 
 	// Get rid of the pattern from the pm
 	if pm.hasOrg(org) {
@@ -372,4 +375,60 @@ func (pm *PatternManager) deletePattern(policyPath string, org string, pattern s
 	}
 
 	return nil
+}
+
+func (pm *PatternManager) NumberPolicies() int {
+	return 0
+}
+
+func (pm *PatternManager) GetAllAgreementProtocols() map[string]policy.BlockchainList {
+	return map[string]policy.BlockchainList{}
+}
+
+// Returns a safe array of orgs served by this agbot.
+func (pm *PatternManager) GetAllPatternOrgs() []string {
+
+	pm.patMapLock.Lock()
+	defer pm.patMapLock.Unlock()
+
+	orgs := make([]string, 0, len(pm.OrgPatterns))
+	for org, _ := range pm.OrgPatterns {
+		orgs = append(orgs, org)
+	}
+	return orgs
+}
+
+// Returns a safe array of patterns served by this agbot.
+func (pm *PatternManager) GetAllPatterns(org string) []string {
+
+	pm.patMapLock.Lock()
+	defer pm.patMapLock.Unlock()
+
+	var orgs []string
+
+	if pm.hasOrg(org) {
+		orgs = make([]string, 0, len(pm.OrgPatterns[org]))
+		for org, _ := range pm.OrgPatterns[org] {
+			orgs = append(orgs, org)
+		}
+	}
+	return orgs
+}
+
+// Returns a copy of the generated policies.
+func (pm *PatternManager) GetPatternPolicies(org string, patternName string) []*policy.Policy {
+
+	pm.patMapLock.Lock()
+	defer pm.patMapLock.Unlock()
+
+	var policies []*policy.Policy
+
+	if pm.hasPattern(org, patternName) {
+		pe := pm.OrgPatterns[org][patternName]
+		for _, pol := range pe.Policies {
+			polCopy := pol.DeepCopy()
+			policies = append(policies, polCopy)
+		}
+	}
+	return policies
 }

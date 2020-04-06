@@ -2,11 +2,12 @@
 SHELL := /bin/bash
 
 #Versioning
-DOCKER_EXCH_TAG := 2.15.1
+DOCKER_EXCH_TAG := 2.18.0
 PKG_URL_BASE := http://169.45.88.181/linux/ubuntu
 PKGS_URL := $(PKG_URL_BASE)/dists/xenial-testing/main/binary-amd64/Packages
 DEB_PKGS_URL := $(PKG_URL_BASE)/pool/main/h/horizon
-HORIZON_PKG_VER ?= $(shell curl -s $(PKGS_URL) | grep -A 2 'Package: horizon' | grep -m 1 'Version:' | awk -F ' |~' '{print $$2}')
+#HORIZON_PKG_VER ?= $(shell curl -s $(PKGS_URL) | grep -A 2 'Package: horizon' | grep -m 1 'Version:' | awk -F ' |~' '{print $$2}')
+HORIZON_PKG_VER=2.25.3
 
 # user configurable variables
 # The TEST_PATTERNS is a comma separated list of following patterns.
@@ -187,7 +188,7 @@ run-exchange-db: test-network
 clean:
 	@echo -e "\nStarting cleanup"
 	@echo "Clean up kube environment"
-	gov/stop_kube.sh
+	# gov/stop_kube.sh
 	@echo "Shutdown anax cleanly"
 	-@curl -sSLX DELETE http://localhost:8510/node 2>/dev/null || true
 	@echo "Removing agbot container"
@@ -253,10 +254,10 @@ agbot-docker-prereqs: $(ANAX_SOURCE)/anax
 	cp -r $(CURDIR)/docker/fs/hzn $(CURDIR)/gov/* $(CURDIR)/docker/fs/helm $(CURDIR)/docker/fs/resources $(CURDIR)/docker/fs/objects $(AGBOT_TEMPFS)/root
 	for f in $$(find $(AGBOT_TEMPFS)/etc/agbot/ -maxdepth 1 -name '*.tmpl'); do EXCH_APP_HOST=$(DOCKER_EXCH) CSS_URL=$(CSS_URL) envsubst < $$f > "$$(echo $$f | sed 's/.tmpl//')"; done
 	for f in $$(find $(AGBOT_TEMPFS)/etc/colonus/ -maxdepth 1 -name '*.tmpl'); do EXCH_APP_HOST=$(DOCKER_EXCH) CSS_URL=$(CSS_URL) envsubst < $$f > "$$(echo $$f | sed 's/.tmpl//')"; done
-	curl $(DEB_PKGS_URL)/horizon_$(HORIZON_PKG_VER)~ppa~ubuntu.xenial.orig.tar.gz \
-	-o $(AGBOT_TEMPFS)/etc/colonus/horizon_$(HORIZON_PKG_VER)~ppa~ubuntu.xenial.orig.tar.gz
-	tar --strip=6 -C $(AGBOT_TEMPFS)/root/.colonus -zxvf $(AGBOT_TEMPFS)/etc/colonus/horizon_$(HORIZON_PKG_VER)~ppa~ubuntu.xenial.orig.tar.gz \
-	./debian/fs-bluehorizon/etc/horizon/trust/horizon.pem ./debian/fs-bluehorizon/etc/horizon/trust/mtn-publicKey.pem
+	#curl $(DEB_PKGS_URL)/horizon_$(HORIZON_PKG_VER)~ppa~ubuntu.xenial.orig.tar.gz \
+	#-o $(AGBOT_TEMPFS)/etc/colonus/horizon_$(HORIZON_PKG_VER)~ppa~ubuntu.xenial.orig.tar.gz
+	#tar --strip=6 -C $(AGBOT_TEMPFS)/root/.colonus -zxvf $(AGBOT_TEMPFS)/etc/colonus/horizon_$(HORIZON_PKG_VER)~ppa~ubuntu.xenial.orig.tar.gz \
+	#./debian/fs-bluehorizon/etc/horizon/trust/horizon.pem ./debian/fs-bluehorizon/etc/horizon/trust/mtn-publicKey.pem
 
 version-check:
 	@echo "Horizon version being used for public keys/configs: $(HORIZON_PKG_VER)"
@@ -281,7 +282,7 @@ exchange-image:
 
 test: clean $(ANAX_SOURCE)/anax run-dockerreg run-exchange run-css run-agbot
 	@echo -e  "\nSetting up agent in kube"
-	gov/run_kube.sh $(AGBOT_TEMPFS) $(ANAX_SOURCE)
+	#gov/run_kube.sh $(AGBOT_TEMPFS) $(ANAX_SOURCE)
 	@echo -e  "\nStarting tests"
 	docker exec $(DOCKER_AGBOT_CNAME) bash -c "export $(TEST_VARS); export $(MSGHUB_VARS); /root/gov-combined.sh"
 

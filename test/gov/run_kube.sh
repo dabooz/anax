@@ -29,7 +29,6 @@ then
 	sudo snap install microk8s --classic --channel=1.14/stable
 	IRC=$?
 	if [ $IRC -ne 0 ]; then echo "Unable to install microk8s: $IRC"; exit 1; fi
-
 fi
 
 #

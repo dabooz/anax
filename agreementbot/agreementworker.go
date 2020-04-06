@@ -2,11 +2,11 @@ package agreementbot
 
 import (
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/golang/glog"
 	"github.com/open-horizon/anax/abstractprotocol"
+	"github.com/open-horizon/anax/agreementbot/matchcache"
 	"github.com/open-horizon/anax/agreementbot/persistence"
 	"github.com/open-horizon/anax/compcheck"
 	"github.com/open-horizon/anax/config"
@@ -227,14 +227,16 @@ type AgreementWorker interface {
 }
 
 type BaseAgreementWorker struct {
-	pm         *policy.PolicyManager
-	db         persistence.AgbotDatabase
-	config     *config.HorizonConfig
-	alm        *AgreementLockManager
-	workerID   string
-	httpClient *http.Client
-	ec         *worker.BaseExchangeContext
-	mmsObjMgr  *MMSObjectPolicyManager
+	pm           policy.IPolicyManager
+	db           persistence.AgbotDatabase
+	config       *config.HorizonConfig
+	alm          *AgreementLockManager
+	workerID     string
+	httpClient   *http.Client
+	ec           *worker.BaseExchangeContext
+	mmsObjMgr    *MMSObjectPolicyManager
+	matchCache   *matchcache.MatchCache
+	depPolicyMgr *BusinessPolicyManager
 }
 
 // A local implementation of the ExchangeContext interface because Agbot agreement workers are not full featured workers.
@@ -353,6 +355,11 @@ func (b *BaseAgreementWorker) InitiateNewAgreement(cph ConsumerProtocolHandler, 
 			if err := b.db.DeleteWorkloadUsage(wi.Device.Id, wi.ConsumerPolicy.Header.Name); err != nil {
 				glog.Warningf(BAWlogstring(workerId, fmt.Sprintf("unable to delete workload usage record for %v with %v because %v", wi.Device.Id, wi.ConsumerPolicy.Header.Name, err)))
 			}
+
+			// // Invalidate the match cache for this node and deployment policy combination.
+			// b.matchCache.InvalidateNodeWithPolicy(wi.Device.Id, fmt.Sprintf("%v/%v", wi.Org, wi.ConsumerPolicyName))
+			// glog.V(3).Infof(BAWlogstring(workerId, fmt.Sprintf("match cache invalidated node %v and policy %v", wi.Device.Id, fmt.Sprintf("%v/%v", wi.Org, wi.ConsumerPolicyName))))
+
 			return
 		}
 
@@ -406,7 +413,7 @@ func (b *BaseAgreementWorker) InitiateNewAgreement(cph ConsumerProtocolHandler, 
 			return
 		}
 
-		// Do not make proposals for services without a deployment configuration got its node type.
+		// Do not make proposals for services without a deployment configuration for its node type.
 		if nodeType == DEVICE_TYPE_DEVICE && workloadDetails.GetDeployment() == "" {
 			glog.Warningf(BAWlogstring(workerId, fmt.Sprintf("cannot make agreement with node %v for service %v/%v %v because it has no deployment configuration.", wi.Device.Id, workload.Org, workload.WorkloadURL, workload.Version)))
 			return
@@ -425,7 +432,7 @@ func (b *BaseAgreementWorker) InitiateNewAgreement(cph ConsumerProtocolHandler, 
 
 		policy_match := false
 
-		// Check if the depended services are suspended. If any of them are suspended, then abort the agreement initialization process.
+		// Check if the required services are suspended. If any of them are suspended, then abort the agreement initialization process.
 		for _, apiSpec := range *asl {
 			for _, devMS := range exchangeDev.RegisteredServices {
 				if devMS.ConfigState == exchange.SERVICE_CONFIGSTATE_SUSPENDED {
@@ -485,6 +492,7 @@ func (b *BaseAgreementWorker) InitiateNewAgreement(cph ConsumerProtocolHandler, 
 			}
 
 			// get service policy
+			// TODO get service policy from business policy manager, not from wi.
 			servicePolTemp, foundTemp := wi.ServicePolicies[sIds[0]]
 			if !foundTemp {
 				var errTemp error
@@ -577,23 +585,23 @@ func (b *BaseAgreementWorker) InitiateNewAgreement(cph ConsumerProtocolHandler, 
 			svcIds = make([]string, len(sIds))
 			copy(svcIds, sIds)
 
-			// if this service policy is not from the policy manager cache, then send a message to pass the service policy back
-			// so that the business policy manager will save it.
+			// If this service policy is not from the policy manager cache, then cache it now that we know it will be used in an agreement.
 			if !found {
 				if servicePol == nil {
 					// An empty policy means that the service does not have a policy.
-					// An empty polcy is also tracked in the business policy manager, this way we know if there is
+					// An empty policy is also tracked in the business policy manager, this way we know if there is
 					// new service policy added later.
 					// The business policy manager does not track all the service policies referenced by a business policy.
 					// It only tracks the ones that have agreements with the nodes.
 					servicePol = new(externalpolicy.ExternalPolicy)
 				}
-				polString, err := json.Marshal(servicePol)
-				if err != nil {
-					glog.Errorf(BAWlogstring(workerId, fmt.Sprintf("error marshaling service policy for service %v. %v", sIds[0], err)))
-					return
-				}
-				cph.SendEventMessage(events.NewCacheServicePolicyMessage(events.CACHE_SERVICE_POLICY, wi.Org, wi.ConsumerPolicyName, sIds[0], string(polString)))
+				// polString, err := json.Marshal(servicePol)
+				// if err != nil {
+				// 	glog.Errorf(BAWlogstring(workerId, fmt.Sprintf("error marshaling service policy for service %v. %v", sIds[0], err)))
+				// 	return
+				// }
+				b.depPolicyMgr.AddServicePolicy(wi.Org, wi.ConsumerPolicyName, sIds[0], servicePol)
+				//cph.SendEventMessage(events.NewCacheServicePolicyMessage(events.CACHE_SERVICE_POLICY, wi.Org, wi.ConsumerPolicyName, sIds[0], string(polString)))
 			}
 
 			// The device seems to support the required API specs, so augment the consumer policy file with the workload
@@ -660,6 +668,16 @@ func (b *BaseAgreementWorker) InitiateNewAgreement(cph ConsumerProtocolHandler, 
 		// Update the agreement in the DB with the proposal and policy
 	} else if err := cph.PersistAgreement(wi, proposal, workerId); err != nil {
 		glog.Errorf(err.Error())
+	} else if wi.ConsumerPolicy.PatternId == "" {
+		nodePolicy := policy.ExtractExternalPolicyFromPolicy(&wi.ProducerPolicy)
+		// TODO: Deal with this hack
+		hackedNP := nodePolicy.Properties.RemoveProperty(externalpolicy.PROP_NODE_HARDWAREID)
+		nodePolicy.Properties = hackedNP
+		if err := b.matchCache.CacheNodeAndDeploymentPolicy(wi.Device.Id, nodePolicy, fmt.Sprintf("%v/%v", wi.Org, wi.ConsumerPolicyName)); err != nil {
+			glog.Errorf(BAWlogstring(workerId, fmt.Sprintf("error caching match results, node %v, error %v", wi.Device.Id, err)))
+		} else {
+			glog.V(3).Infof(BAWlogstring(workerId, fmt.Sprintf("match cache cached node policy %v with policy %v", nodePolicy, fmt.Sprintf("%v/%v", wi.Org, wi.ConsumerPolicyName))))
+		}
 	}
 
 }

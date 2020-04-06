@@ -131,6 +131,9 @@ func main() {
 
 	// Get the device side policy manager started early so that all the workers can use it.
 	// Make sure the policy directory is in place.
+
+	// TODO: Get rid of the policymanager
+
 	var pm *policy.PolicyManager
 	if cfg.Edge.PolicyPath == "" {
 		// nothing to initialize

@@ -4,13 +4,9 @@ package agreementbot
 
 import (
 	"bytes"
-	"errors"
 	"flag"
 	"fmt"
 	"github.com/open-horizon/anax/exchange"
-	"io/ioutil"
-	"os"
-	"strings"
 	"testing"
 )
 
@@ -57,12 +53,11 @@ func Test_pattern_manager_success1(t *testing.T) {
 // No existing served patterns, no new served patterns
 func Test_pattern_manager_setpatterns0(t *testing.T) {
 
-	policyPath := "/tmp/servedpatterntest/"
 	servedPatterns := map[string]exchange.ServedPattern{}
 
 	if np := NewPatternManager(); np == nil {
 		t.Errorf("Error: pattern manager not created")
-	} else if err := np.SetCurrentPatterns(servedPatterns, policyPath); err != nil {
+	} else if err := np.SetCurrentPatterns(servedPatterns); err != nil {
 		t.Errorf("Error %v consuming served patterns %v", err, servedPatterns)
 	} else if len(np.OrgPatterns) != 0 {
 		t.Errorf("Error: should have 0 org in the PatternManager, have %v", len(np.OrgPatterns))
@@ -75,7 +70,6 @@ func Test_pattern_manager_setpatterns0(t *testing.T) {
 // Add a new served org and pattern
 func Test_pattern_manager_setpatterns1(t *testing.T) {
 
-	policyPath := "/tmp/servedpatterntest/"
 	servedPatterns := map[string]exchange.ServedPattern{
 		"myorg1_pattern1": {
 			PatternOrg: "myorg1",
@@ -86,7 +80,7 @@ func Test_pattern_manager_setpatterns1(t *testing.T) {
 
 	if np := NewPatternManager(); np == nil {
 		t.Errorf("Error: pattern manager not created")
-	} else if err := np.SetCurrentPatterns(servedPatterns, policyPath); err != nil {
+	} else if err := np.SetCurrentPatterns(servedPatterns); err != nil {
 		t.Errorf("Error %v consuming served patterns %v", err, servedPatterns)
 	} else if len(np.OrgPatterns) != 1 {
 		t.Errorf("Error: should have 1 org in the PatternManager, have %v", len(np.OrgPatterns))
@@ -99,7 +93,6 @@ func Test_pattern_manager_setpatterns1(t *testing.T) {
 // Remove an org and pattern, replace with a new org and pattern
 func Test_pattern_manager_setpatterns2(t *testing.T) {
 
-	policyPath := "/tmp/servedpatterntest/"
 	myorg1 := "myorg1"
 	myorg2 := "myorg2"
 	myorg3 := "myorg3"
@@ -168,27 +161,22 @@ func Test_pattern_manager_setpatterns2(t *testing.T) {
 		},
 	}
 
-	// setup test
-	if err := cleanTestDir(policyPath); err != nil {
-		t.Errorf(err.Error())
-	}
-
 	// run test
 	if np := NewPatternManager(); np == nil {
 		t.Errorf("Error: pattern manager not created")
-	} else if err := np.SetCurrentPatterns(servedPatterns1, policyPath); err != nil {
+	} else if err := np.SetCurrentPatterns(servedPatterns1); err != nil {
 		t.Errorf("Error %v consuming served patterns %v", err, servedPatterns1)
-	} else if err := np.UpdatePatternPolicies(myorg1, definedPatterns1, policyPath); err != nil {
+	} else if err := np.UpdatePatternPolicies(myorg1, definedPatterns1); err != nil {
 		t.Errorf("Error: error updating pattern policies, %v", err)
 	} else if len(np.OrgPatterns) != 1 {
 		t.Errorf("Error: should have 1 org in the PatternManager, have %v", len(np.OrgPatterns))
 	} else if !np.hasOrg(myorg1) {
 		t.Errorf("Error: PM should have org %v but doesnt, has %v", myorg1, np)
-	} else if err := getPatternEntryFiles(np.OrgPatterns[myorg1][pattern1].PolicyFileNames); err != nil {
-		t.Errorf("Error getting pattern entry files for %v %v, %v", myorg1, pattern1, err)
-	} else if err := np.SetCurrentPatterns(servedPatterns2, policyPath); err != nil {
+		// } else if err := getPatternEntryFiles(np.OrgPatterns[myorg1][pattern1].PolicyFileNames); err != nil {
+		// 	t.Errorf("Error getting pattern entry files for %v %v, %v", myorg1, pattern1, err)
+	} else if err := np.SetCurrentPatterns(servedPatterns2); err != nil {
 		t.Errorf("Error %v consuming served patterns %v", err, servedPatterns2)
-	} else if err := np.UpdatePatternPolicies(myorg2, definedPatterns2, policyPath); err != nil {
+	} else if err := np.UpdatePatternPolicies(myorg2, definedPatterns2); err != nil {
 		t.Errorf("Error: error updating pattern policies, %v", err)
 	} else if len(np.OrgPatterns) != 1 {
 		t.Errorf("Error: should have 1 org in the PatternManager, have %v", len(np.OrgPatterns))
@@ -196,14 +184,14 @@ func Test_pattern_manager_setpatterns2(t *testing.T) {
 		t.Errorf("Error: PM should have org %v but doesnt, has %v", myorg2, np)
 	} else if np.hasOrg(myorg1) {
 		t.Errorf("Error: PM should NOT have org %v but does %v", myorg1, np)
-	} else if err := getPatternEntryFiles(np.OrgPatterns[myorg2][pattern2].PolicyFileNames); err != nil {
-		t.Errorf("Error getting pattern entry files for %v %v, %v", myorg2, pattern2, err)
-	} else if files, err := getPolicyFiles(policyPath + myorg1); err != nil {
-		t.Errorf(err.Error())
-	} else if len(files) != 0 {
-		t.Errorf("Error: found policy files for %v, %v", myorg1, files)
-	} else {
-		t.Log(np)
+		// } else if err := getPatternEntryFiles(np.OrgPatterns[myorg2][pattern2].PolicyFileNames); err != nil {
+		// 	t.Errorf("Error getting pattern entry files for %v %v, %v", myorg2, pattern2, err)
+		// } else if files, err := getPolicyFiles(policyPath + myorg1); err != nil {
+		// 	t.Errorf(err.Error())
+		// } else if len(files) != 0 {
+		// 	t.Errorf("Error: found policy files for %v, %v", myorg1, files)
+		// } else {
+		// 	t.Log(np)
 	}
 
 }
@@ -211,7 +199,6 @@ func Test_pattern_manager_setpatterns2(t *testing.T) {
 // Remove an org with multiple patterns, add a pattern to existing org
 func Test_pattern_manager_setpatterns3(t *testing.T) {
 
-	policyPath := "/tmp/servedpatterntest/"
 	myorg1 := "myorg1"
 	myorg2 := "myorg2"
 	myorg3 := "myorg3"
@@ -335,33 +322,28 @@ func Test_pattern_manager_setpatterns3(t *testing.T) {
 		},
 	}
 
-	// setup test
-	if err := cleanTestDir(policyPath); err != nil {
-		t.Errorf(err.Error())
-	}
-
 	// run test
 	if np := NewPatternManager(); np == nil {
 		t.Errorf("Error: pattern manager not created")
-	} else if err := np.SetCurrentPatterns(servedPatterns1, policyPath); err != nil {
+	} else if err := np.SetCurrentPatterns(servedPatterns1); err != nil {
 		t.Errorf("Error %v consuming served patterns %v", err, servedPatterns1)
-	} else if err := np.UpdatePatternPolicies(myorg1, definedPatterns1, policyPath); err != nil {
+	} else if err := np.UpdatePatternPolicies(myorg1, definedPatterns1); err != nil {
 		t.Errorf("Error: error updating pattern policies, %v", err)
-	} else if err := np.UpdatePatternPolicies(myorg2, definedPatterns2, policyPath); err != nil {
+	} else if err := np.UpdatePatternPolicies(myorg2, definedPatterns2); err != nil {
 		t.Errorf("Error: error updating pattern policies, %v", err)
 	} else if len(np.OrgPatterns) != 2 {
 		t.Errorf("Error: should have 2 orgs in the PatternManager, have %v", len(np.OrgPatterns))
 	} else if !np.hasOrg(myorg1) {
 		t.Errorf("Error: PM should have org %v but doesnt, has %v", myorg1, np)
-	} else if err := getPatternEntryFiles(np.OrgPatterns[myorg1][pattern1].PolicyFileNames); err != nil {
-		t.Errorf("Error getting pattern entry files for %v %v, %v", myorg1, pattern1, err)
-	} else if err := getPatternEntryFiles(np.OrgPatterns[myorg1][pattern2].PolicyFileNames); err != nil {
-		t.Errorf("Error getting pattern entry files for %v %v, %v", myorg1, pattern2, err)
-	} else if err := getPatternEntryFiles(np.OrgPatterns[myorg2][pattern2].PolicyFileNames); err != nil {
-		t.Errorf("Error getting pattern entry files for %v %v, %v", myorg2, pattern2, err)
-	} else if err := np.SetCurrentPatterns(servedPatterns2, policyPath); err != nil {
+		// } else if err := getPatternEntryFiles(np.OrgPatterns[myorg1][pattern1].PolicyFileNames); err != nil {
+		// 	t.Errorf("Error getting pattern entry files for %v %v, %v", myorg1, pattern1, err)
+		// } else if err := getPatternEntryFiles(np.OrgPatterns[myorg1][pattern2].PolicyFileNames); err != nil {
+		// 	t.Errorf("Error getting pattern entry files for %v %v, %v", myorg1, pattern2, err)
+		// } else if err := getPatternEntryFiles(np.OrgPatterns[myorg2][pattern2].PolicyFileNames); err != nil {
+		// 	t.Errorf("Error getting pattern entry files for %v %v, %v", myorg2, pattern2, err)
+	} else if err := np.SetCurrentPatterns(servedPatterns2); err != nil {
 		t.Errorf("Error %v consuming served patterns %v", err, servedPatterns2)
-	} else if err := np.UpdatePatternPolicies(myorg2, definedPatterns2, policyPath); err != nil {
+	} else if err := np.UpdatePatternPolicies(myorg2, definedPatterns2); err != nil {
 		t.Errorf("Error: error updating pattern policies, %v", err)
 	} else if len(np.OrgPatterns) != 1 {
 		t.Errorf("Error: should have 1 org in the PatternManager, have %v", len(np.OrgPatterns))
@@ -369,16 +351,16 @@ func Test_pattern_manager_setpatterns3(t *testing.T) {
 		t.Errorf("Error: PM should have org %v but doesnt, has %v", myorg2, np)
 	} else if np.hasOrg(myorg1) {
 		t.Errorf("Error: PM should NOT have org %v but does %v", myorg1, np)
-	} else if err := getPatternEntryFiles(np.OrgPatterns[myorg2][pattern1].PolicyFileNames); err != nil {
-		t.Errorf("Error getting pattern entry files for %v %v, %v", myorg2, pattern1, err)
-	} else if err := getPatternEntryFiles(np.OrgPatterns[myorg2][pattern2].PolicyFileNames); err != nil {
-		t.Errorf("Error getting pattern entry files for %v %v, %v", myorg2, pattern2, err)
-	} else if files, err := getPolicyFiles(policyPath + myorg1); err != nil {
-		t.Errorf(err.Error())
-	} else if len(files) != 0 {
-		t.Errorf("Error: found policy files for %v, %v", myorg1, files)
-	} else {
-		t.Log(np)
+		// } else if err := getPatternEntryFiles(np.OrgPatterns[myorg2][pattern1].PolicyFileNames); err != nil {
+		// 	t.Errorf("Error getting pattern entry files for %v %v, %v", myorg2, pattern1, err)
+		// } else if err := getPatternEntryFiles(np.OrgPatterns[myorg2][pattern2].PolicyFileNames); err != nil {
+		// 	t.Errorf("Error getting pattern entry files for %v %v, %v", myorg2, pattern2, err)
+		// } else if files, err := getPolicyFiles(policyPath + myorg1); err != nil {
+		// 	t.Errorf(err.Error())
+		// } else if len(files) != 0 {
+		// 	t.Errorf("Error: found policy files for %v, %v", myorg1, files)
+		// } else {
+		// 	t.Log(np)
 	}
 
 }
@@ -386,7 +368,6 @@ func Test_pattern_manager_setpatterns3(t *testing.T) {
 // // Remove a pattern but org stays around, add a pattern to existing org
 func Test_pattern_manager_setpatterns4(t *testing.T) {
 
-	policyPath := "/tmp/servedpatterntest/"
 	myorg1 := "myorg1"
 	myorg2 := "myorg2"
 	myorg3 := "myorg3"
@@ -515,19 +496,14 @@ func Test_pattern_manager_setpatterns4(t *testing.T) {
 		},
 	}
 
-	// setup the test
-	if err := cleanTestDir(policyPath); err != nil {
-		t.Errorf(err.Error())
-	}
-
 	// run the test
 	if np := NewPatternManager(); np == nil {
 		t.Errorf("Error: pattern manager not created")
-	} else if err := np.SetCurrentPatterns(servedPatterns1, policyPath); err != nil {
+	} else if err := np.SetCurrentPatterns(servedPatterns1); err != nil {
 		t.Errorf("Error %v consuming served patterns %v", err, servedPatterns1)
-	} else if err := np.UpdatePatternPolicies(myorg1, definedPatterns1, policyPath); err != nil {
+	} else if err := np.UpdatePatternPolicies(myorg1, definedPatterns1); err != nil {
 		t.Errorf("Error: error updating pattern policies, %v", err)
-	} else if err := np.UpdatePatternPolicies(myorg2, definedPatterns2, policyPath); err != nil {
+	} else if err := np.UpdatePatternPolicies(myorg2, definedPatterns2); err != nil {
 		t.Errorf("Error: error updating pattern policies, %v", err)
 	} else if len(np.OrgPatterns) != 2 {
 		t.Errorf("Error: should have 2 orgs in the PatternManager, have %v", len(np.OrgPatterns))
@@ -535,17 +511,17 @@ func Test_pattern_manager_setpatterns4(t *testing.T) {
 		t.Errorf("Error: PM should have org %v but doesnt, has %v", myorg1, np)
 	} else if !np.hasOrg(myorg2) {
 		t.Errorf("Error: PM should have org %v but doesnt, has %v", myorg2, np)
-	} else if err := getPatternEntryFiles(np.OrgPatterns[myorg1][pattern1].PolicyFileNames); err != nil {
-		t.Errorf("Error getting pattern entry files for %v %v, %v", myorg1, pattern1, err)
-	} else if err := getPatternEntryFiles(np.OrgPatterns[myorg1][pattern2].PolicyFileNames); err != nil {
-		t.Errorf("Error getting pattern entry files for %v %v, %v", myorg1, pattern2, err)
-	} else if err := getPatternEntryFiles(np.OrgPatterns[myorg2][pattern2].PolicyFileNames); err != nil {
-		t.Errorf("Error getting pattern entry files for %v %v, %v", myorg2, pattern2, err)
-	} else if err := np.SetCurrentPatterns(servedPatterns2, policyPath); err != nil {
+		// } else if err := getPatternEntryFiles(np.OrgPatterns[myorg1][pattern1].PolicyFileNames); err != nil {
+		// 	t.Errorf("Error getting pattern entry files for %v %v, %v", myorg1, pattern1, err)
+		// } else if err := getPatternEntryFiles(np.OrgPatterns[myorg1][pattern2].PolicyFileNames); err != nil {
+		// 	t.Errorf("Error getting pattern entry files for %v %v, %v", myorg1, pattern2, err)
+		// } else if err := getPatternEntryFiles(np.OrgPatterns[myorg2][pattern2].PolicyFileNames); err != nil {
+		// 	t.Errorf("Error getting pattern entry files for %v %v, %v", myorg2, pattern2, err)
+	} else if err := np.SetCurrentPatterns(servedPatterns2); err != nil {
 		t.Errorf("Error %v consuming served patterns %v", err, servedPatterns2)
-	} else if err := np.UpdatePatternPolicies(myorg1, definedPatterns1, policyPath); err != nil {
+	} else if err := np.UpdatePatternPolicies(myorg1, definedPatterns1); err != nil {
 		t.Errorf("Error: error updating pattern policies, %v", err)
-	} else if err := np.UpdatePatternPolicies(myorg2, definedPatterns2, policyPath); err != nil {
+	} else if err := np.UpdatePatternPolicies(myorg2, definedPatterns2); err != nil {
 		t.Errorf("Error: error updating pattern policies, %v", err)
 	} else if len(np.OrgPatterns) != 2 {
 		t.Errorf("Error: should have 2 org in the PatternManager, have %v", len(np.OrgPatterns))
@@ -553,12 +529,12 @@ func Test_pattern_manager_setpatterns4(t *testing.T) {
 		t.Errorf("Error: PM should have org %v but doesnt, has %v", myorg2, np)
 	} else if !np.hasOrg(myorg1) {
 		t.Errorf("Error: PM should have org %v but doesnt, has %v", myorg1, np)
-	} else if err := getPatternEntryFiles(np.OrgPatterns[myorg1][pattern1].PolicyFileNames); err != nil {
-		t.Errorf("Error getting pattern entry files for %v %v, %v", myorg1, pattern1, err)
-	} else if err := getPatternEntryFiles(np.OrgPatterns[myorg2][pattern1].PolicyFileNames); err != nil {
-		t.Errorf("Error getting pattern entry files for %v %v, %v", myorg2, pattern1, err)
-	} else if err := getPatternEntryFiles(np.OrgPatterns[myorg2][pattern2].PolicyFileNames); err != nil {
-		t.Errorf("Error getting pattern entry files for %v %v, %v", myorg2, pattern2, err)
+		// } else if err := getPatternEntryFiles(np.OrgPatterns[myorg1][pattern1].PolicyFileNames); err != nil {
+		// 	t.Errorf("Error getting pattern entry files for %v %v, %v", myorg1, pattern1, err)
+		// } else if err := getPatternEntryFiles(np.OrgPatterns[myorg2][pattern1].PolicyFileNames); err != nil {
+		// 	t.Errorf("Error getting pattern entry files for %v %v, %v", myorg2, pattern1, err)
+		// } else if err := getPatternEntryFiles(np.OrgPatterns[myorg2][pattern2].PolicyFileNames); err != nil {
+		// 	t.Errorf("Error getting pattern entry files for %v %v, %v", myorg2, pattern2, err)
 	} else {
 		t.Log(np)
 	}
@@ -567,7 +543,6 @@ func Test_pattern_manager_setpatterns4(t *testing.T) {
 // UpdatePatternPolicies removes the pattern, org and the policy files
 func Test_pattern_manager_setpatterns5(t *testing.T) {
 
-	policyPath := "/tmp/servedpatterntest/"
 	myorg1 := "myorg1"
 	myorg2 := "myorg2"
 	pattern1 := "pattern1"
@@ -700,19 +675,14 @@ func Test_pattern_manager_setpatterns5(t *testing.T) {
 		},
 	}
 
-	// setup the test
-	if err := cleanTestDir(policyPath); err != nil {
-		t.Errorf(err.Error())
-	}
-
 	// run the test
 	if np := NewPatternManager(); np == nil {
 		t.Errorf("Error: pattern manager not created")
-	} else if err := np.SetCurrentPatterns(servedPatterns1, policyPath); err != nil {
+	} else if err := np.SetCurrentPatterns(servedPatterns1); err != nil {
 		t.Errorf("Error %v consuming served patterns %v", err, servedPatterns1)
-	} else if err := np.UpdatePatternPolicies(myorg1, definedPatterns1, policyPath); err != nil {
+	} else if err := np.UpdatePatternPolicies(myorg1, definedPatterns1); err != nil {
 		t.Errorf("Error: error updating pattern policies, %v", err)
-	} else if err := np.UpdatePatternPolicies(myorg2, definedPatterns2, policyPath); err != nil {
+	} else if err := np.UpdatePatternPolicies(myorg2, definedPatterns2); err != nil {
 		t.Errorf("Error: error updating pattern policies, %v", err)
 	} else if len(np.OrgPatterns) != 2 {
 		t.Errorf("Error: should have 2 orgs in the PatternManager, have %v", len(np.OrgPatterns))
@@ -720,32 +690,32 @@ func Test_pattern_manager_setpatterns5(t *testing.T) {
 		t.Errorf("Error: PM should have org %v but doesnt, has %v", myorg1, np)
 	} else if !np.hasOrg(myorg2) {
 		t.Errorf("Error: PM should have org %v but doesnt, has %v", myorg2, np)
-	} else if err := getPatternEntryFiles(np.OrgPatterns[myorg1][pattern1].PolicyFileNames); err != nil {
-		t.Errorf("Error getting pattern entry files for %v %v, %v", myorg1, pattern1, err)
-	} else if err := getPatternEntryFiles(np.OrgPatterns[myorg1][pattern2].PolicyFileNames); err != nil {
-		t.Errorf("Error getting pattern entry files for %v %v, %v", myorg1, pattern2, err)
-	} else if err := getPatternEntryFiles(np.OrgPatterns[myorg2][pattern2].PolicyFileNames); err != nil {
-		t.Errorf("Error getting pattern entry files for %v %v, %v", myorg2, pattern2, err)
+		// } else if err := getPatternEntryFiles(np.OrgPatterns[myorg1][pattern1].PolicyFileNames); err != nil {
+		// 	t.Errorf("Error getting pattern entry files for %v %v, %v", myorg1, pattern1, err)
+		// } else if err := getPatternEntryFiles(np.OrgPatterns[myorg1][pattern2].PolicyFileNames); err != nil {
+		// 	t.Errorf("Error getting pattern entry files for %v %v, %v", myorg1, pattern2, err)
+		// } else if err := getPatternEntryFiles(np.OrgPatterns[myorg2][pattern2].PolicyFileNames); err != nil {
+		// 	t.Errorf("Error getting pattern entry files for %v %v, %v", myorg2, pattern2, err)
 	} else {
-		files_delete := np.OrgPatterns[myorg1][pattern2].PolicyFileNames
-		if err := np.UpdatePatternPolicies(myorg1, definedPatterns11, policyPath); err != nil {
+		// files_delete := np.OrgPatterns[myorg1][pattern2].PolicyFileNames
+		if err := np.UpdatePatternPolicies(myorg1, definedPatterns11); err != nil {
 			t.Errorf("Error: error updating pattern policies, %v", err)
-		} else if err := getPatternEntryFiles(files_delete); err == nil {
-			t.Errorf("Should return error but got nil for checking policy files %v", files_delete)
+			// } else if err := getPatternEntryFiles(files_delete); err == nil {
+			// 	t.Errorf("Should return error but got nil for checking policy files %v", files_delete)
 		} else if len(np.OrgPatterns[myorg1]) != 1 {
 			t.Errorf("Error: PM should have 1 pattern for org %v but got %v", myorg1, np.OrgPatterns[myorg1])
 		} else {
-			files_delete1 := np.OrgPatterns[myorg1][pattern1].PolicyFileNames
-			if err := np.UpdatePatternPolicies(myorg1, make(map[string]exchange.Pattern), policyPath); err != nil {
+			// files_delete1 := np.OrgPatterns[myorg1][pattern1].PolicyFileNames
+			if err := np.UpdatePatternPolicies(myorg1, make(map[string]exchange.Pattern)); err != nil {
 				t.Errorf("Error: error updating pattern policies, %v", err)
 			} else if np.hasOrg(myorg1) {
 				t.Errorf("Error: org %v should have deleted but not.", myorg1)
-			} else if err := getPatternEntryFiles(files_delete1); err == nil {
-				t.Errorf("Should return error but got nil for checking policy files %v", files_delete1)
+				// } else if err := getPatternEntryFiles(files_delete1); err == nil {
+				// 	t.Errorf("Should return error but got nil for checking policy files %v", files_delete1)
 			} else if !np.hasOrg(myorg2) {
 				t.Errorf("Error: org %v should be left but not.", myorg2)
-			} else if err := getPatternEntryFiles(np.OrgPatterns[myorg2][pattern2].PolicyFileNames); err != nil {
-				t.Errorf("Error getting pattern entry files for %v %v, %v", myorg2, pattern2, err)
+				// } else if err := getPatternEntryFiles(np.OrgPatterns[myorg2][pattern2].PolicyFileNames); err != nil {
+				// 	t.Errorf("Error getting pattern entry files for %v %v, %v", myorg2, pattern2, err)
 			} else {
 				t.Log(np)
 			}
@@ -754,45 +724,45 @@ func Test_pattern_manager_setpatterns5(t *testing.T) {
 }
 
 // Utility functions
-// Clean up the test directory
-func cleanTestDir(policyPath string) error {
-	if _, err := os.Stat(policyPath); !os.IsNotExist(err) {
-		if err := os.RemoveAll(policyPath); err != nil {
-			return err
-		}
-	}
+// // Clean up the test directory
+// func cleanTestDir(policyPath string) error {
+// 	if _, err := os.Stat(policyPath); !os.IsNotExist(err) {
+// 		if err := os.RemoveAll(policyPath); err != nil {
+// 			return err
+// 		}
+// 	}
 
-	if err := os.MkdirAll(policyPath, 0764); err != nil {
-		return err
-	}
-	return nil
-}
+// 	if err := os.MkdirAll(policyPath, 0764); err != nil {
+// 		return err
+// 	}
+// 	return nil
+// }
 
-// Check for policy files referenced by the pattern manager entries
-func getPatternEntryFiles(files []string) error {
-	for _, filename := range files {
-		if _, err := os.Stat(filename); os.IsNotExist(err) {
-			return errors.New(fmt.Sprintf("File %v does not exist", filename))
-		}
-	}
-	return nil
-}
+// // Check for policy files referenced by the pattern manager entries
+// func getPatternEntryFiles(files []string) error {
+// 	for _, filename := range files {
+// 		if _, err := os.Stat(filename); os.IsNotExist(err) {
+// 			return errors.New(fmt.Sprintf("File %v does not exist", filename))
+// 		}
+// 	}
+// 	return nil
+// }
 
-// Check for policy files that shouldnt have been left behind
-func getPolicyFiles(homePath string) ([]os.FileInfo, error) {
-	res := make([]os.FileInfo, 0, 10)
+// // Check for policy files that shouldnt have been left behind
+// func getPolicyFiles(homePath string) ([]os.FileInfo, error) {
+// 	res := make([]os.FileInfo, 0, 10)
 
-	if files, err := ioutil.ReadDir(homePath); err != nil {
-		return nil, err
-	} else {
-		for _, fileInfo := range files {
-			if strings.HasSuffix(fileInfo.Name(), ".policy") && !fileInfo.IsDir() {
-				res = append(res, fileInfo)
-			}
-		}
-		return res, nil
-	}
-}
+// 	if files, err := ioutil.ReadDir(homePath); err != nil {
+// 		return nil, err
+// 	} else {
+// 		for _, fileInfo := range files {
+// 			if strings.HasSuffix(fileInfo.Name(), ".policy") && !fileInfo.IsDir() {
+// 				res = append(res, fileInfo)
+// 			}
+// 		}
+// 		return res, nil
+// 	}
+// }
 
 // test if different order in the struct could change the hash.
 func Test_pattern_manager_hashPattern(t *testing.T) {
@@ -822,19 +792,12 @@ func Test_pattern_manager_ServedPatterns(t *testing.T) {
 		"org17_*_org17":       {PatternOrg: "org17", Pattern: "*", NodeOrg: "", LastUpdated: "2018-05-18T19:26:10.097Z[UTC]"},
 	}
 
-	policyPath := "/tmp/servedpatterntest/"
-
-	// setup the test
-	if err := cleanTestDir(policyPath); err != nil {
-		t.Errorf(err.Error())
-	}
-
 	np := NewPatternManager()
 	if np == nil {
 		t.Errorf("Error: pattern manager not created")
 	}
 
-	err := np.SetCurrentPatterns(servedPatterns, policyPath)
+	err := np.SetCurrentPatterns(servedPatterns)
 	if err != nil {
 		t.Errorf("Error %v consuming served patterns %v", err, servedPatterns)
 	}
@@ -910,13 +873,6 @@ func Test_pattern_manager_ServedPatterns(t *testing.T) {
 
 // test large data
 func Test_pattern_manager_setpatterns6(t *testing.T) {
-
-	policyPath := "/tmp/servedpatterntest/"
-
-	// setup the test
-	if err := cleanTestDir(policyPath); err != nil {
-		t.Errorf(err.Error())
-	}
 
 	servedPatterns := map[string]exchange.ServedPattern{
 		"org1_EdgeType":           {PatternOrg: "org1", Pattern: "EdgeType", NodeOrg: "", LastUpdated: "2018-05-14T19:20:27.187Z[UTC]"},
@@ -997,7 +953,7 @@ func Test_pattern_manager_setpatterns6(t *testing.T) {
 	p_exp := getTestPattern()
 	h_exp, _ := hashPattern(&p_exp)
 	for i := 0; i < 3; i++ {
-		err := np.SetCurrentPatterns(servedPatterns, policyPath)
+		err := np.SetCurrentPatterns(servedPatterns)
 		if err != nil {
 			t.Errorf("Error %v consuming served patterns %v", err, servedPatterns)
 		}
@@ -1012,7 +968,7 @@ func Test_pattern_manager_setpatterns6(t *testing.T) {
 				}
 				definedPatterns[fmt.Sprintf("%v/%v", org, id)] = p
 			}
-			err := np.UpdatePatternPolicies(org, definedPatterns, policyPath)
+			err := np.UpdatePatternPolicies(org, definedPatterns)
 			if err != nil {
 				t.Errorf("Error: error updating pattern policies, %v", err)
 			} else if !np.hasOrg(org) {
