@@ -3,6 +3,7 @@ package agreementbot
 import (
 	"fmt"
 	"github.com/golang/glog"
+	"github.com/open-horizon/anax/agreementbot/matchcache"
 	"github.com/open-horizon/anax/agreementbot/persistence"
 	"github.com/open-horizon/anax/basicprotocol"
 	"github.com/open-horizon/anax/config"
@@ -19,7 +20,7 @@ type BasicAgreementWorker struct {
 	protocolHandler *BasicProtocolHandler
 }
 
-func NewBasicAgreementWorker(c *BasicProtocolHandler, cfg *config.HorizonConfig, db persistence.AgbotDatabase, pm *policy.PolicyManager, alm *AgreementLockManager, mmsObjMgr *MMSObjectPolicyManager) *BasicAgreementWorker {
+func NewBasicAgreementWorker(c *BasicProtocolHandler, cfg *config.HorizonConfig, db persistence.AgbotDatabase, pm policy.IPolicyManager, alm *AgreementLockManager, mmsObjMgr *MMSObjectPolicyManager, matchCache *matchcache.MatchCache) *BasicAgreementWorker {
 
 	id, err := uuid.NewV4()
 	if err != nil {
@@ -36,6 +37,7 @@ func NewBasicAgreementWorker(c *BasicProtocolHandler, cfg *config.HorizonConfig,
 			httpClient: cfg.Collaborators.HTTPClientFactory.NewHTTPClient(nil),
 			ec:         worker.NewExchangeContext(cfg.AgreementBot.ExchangeId, cfg.AgreementBot.ExchangeToken, cfg.AgreementBot.ExchangeURL, cfg.GetAgbotCSSURL(), cfg.Collaborators.HTTPClientFactory),
 			mmsObjMgr:  mmsObjMgr,
+			matchCache: matchCache,
 		},
 		protocolHandler: c,
 	}

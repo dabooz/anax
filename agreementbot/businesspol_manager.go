@@ -12,7 +12,6 @@ import (
 	"github.com/open-horizon/anax/exchange"
 	"github.com/open-horizon/anax/externalpolicy"
 	"github.com/open-horizon/anax/policy"
-	"golang.org/x/crypto/sha3"
 	"reflect"
 	"sync"
 	"time"
@@ -21,7 +20,7 @@ import (
 type ServicePolicyEntry struct {
 	Policy  *externalpolicy.ExternalPolicy `json:"policy,omitempty"`      // the metadata for this service policy from the exchange.
 	Updated uint64                         `json:"updatedTime,omitempty"` // the time when this entry was updated
-	Hash    []byte                         `json:"hash,omitempty"`        // a hash of the service policy to compare for matadata changes in the exchange
+	Hash    []byte                         `json:"hash,omitempty"`        // a hash of the service policy to compare for metadata changes in the exchange
 }
 
 func (p *ServicePolicyEntry) String() string {
@@ -39,7 +38,7 @@ func (p *ServicePolicyEntry) ShortString() string {
 func NewServicePolicyEntry(p *externalpolicy.ExternalPolicy, svcId string) (*ServicePolicyEntry, error) {
 	pSE := new(ServicePolicyEntry)
 	pSE.Updated = uint64(time.Now().Unix())
-	if hash, err := hashPolicy(p); err != nil {
+	if hash, err := cutil.HashObject(p); err != nil {
 		return nil, err
 	} else {
 		pSE.Hash = hash
@@ -50,30 +49,29 @@ func NewServicePolicyEntry(p *externalpolicy.ExternalPolicy, svcId string) (*Ser
 }
 
 type BusinessPolicyEntry struct {
-	Policy          *policy.Policy                 `json:"policy,omitempty"`          // the metadata for this business policy from the exchange, it is the converted to the internal policy format
+	Policy          *policy.Policy                 `json:"policy,omitempty"`          // the metadata for this business policy from the exchange, it is converted to the internal policy format
 	Updated         uint64                         `json:"updatedTime,omitempty"`     // the time when this entry was updated
-	Hash            []byte                         `json:"hash,omitempty"`            // a hash of the business policy to compare for matadata changes in the exchange
+	Hash            []byte                         `json:"hash,omitempty"`            // a hash of the business policy to compare for metadata changes in the exchange
 	ServicePolicies map[string]*ServicePolicyEntry `json:"servicePolicies,omitempty"` // map of the service id and service policies
 }
 
 // Create a new BusinessPolicyEntry. It converts the businesspolicy to internal policy format.
-// the business policy exchange id (or/id) is the header name for the internal generated policy.
+// The business policy exchange id (org/id) is the header name for the internal generated policy.
 func NewBusinessPolicyEntry(pol *businesspolicy.BusinessPolicy, polId string) (*BusinessPolicyEntry, error) {
 	pBE := new(BusinessPolicyEntry)
 	pBE.Updated = uint64(time.Now().Unix())
-	if hash, err := hashPolicy(pol); err != nil {
+	if hash, err := cutil.HashObject(pol); err != nil {
 		return nil, err
 	} else {
 		pBE.Hash = hash
 	}
 	pBE.ServicePolicies = make(map[string]*ServicePolicyEntry, 0)
 
-	// validate and convert the exchange business policy to internal policy format
+	// Validate and convert the exchange business policy to internal policy format.
 	if err := pol.Validate(); err != nil {
-		return nil, fmt.Errorf("Failed to validate the business policy %v. %v", *pol, err)
-		//} else if pPolicy, err := pol.GenPolicyFromBusinessPolicy(polId); err != nil {
+		return nil, fmt.Errorf("Failed to validate the deployment policy %v. %v", *pol, err)
 	} else if pPolicy, err := pol.GenPolicyFromBusinessPolicy(polId); err != nil {
-		return nil, fmt.Errorf("Failed to convert the business policy to internal policy format: %v. %v", *pol, err)
+		return nil, fmt.Errorf("Failed to convert the deployment policy to internal policy format: %v. %v", *pol, err)
 	} else {
 		pBE.Policy = pPolicy
 	}
@@ -82,7 +80,7 @@ func NewBusinessPolicyEntry(pol *businesspolicy.BusinessPolicy, polId string) (*
 }
 
 func (p *BusinessPolicyEntry) String() string {
-	return fmt.Sprintf("BusinessPolicyEntry: "+
+	return fmt.Sprintf("DeploymentPolicyEntry: "+
 		"Updated: %v "+
 		"Hash: %x "+
 		"Policy: %v"+
@@ -95,7 +93,7 @@ func (p *BusinessPolicyEntry) ShortString() string {
 	for k, _ := range p.ServicePolicies {
 		keys = append(keys, k)
 	}
-	return fmt.Sprintf("BusinessPolicyEntry: "+
+	return fmt.Sprintf("DeploymentPolicyEntry: "+
 		"Updated: %v "+
 		"Hash: %x "+
 		"Policy: %v"+
@@ -103,18 +101,8 @@ func (p *BusinessPolicyEntry) ShortString() string {
 		p.Updated, p.Hash, p.Policy.Header.Name, keys)
 }
 
-// hash the business policy or the service policy gotten from the exchange
-func hashPolicy(p interface{}) ([]byte, error) {
-	if ps, err := json.Marshal(p); err != nil {
-		return nil, errors.New(fmt.Sprintf("unable to marshal poliy %v to a string, error %v", p, err))
-	} else {
-		hash := sha3.Sum256([]byte(ps))
-		return hash[:], nil
-	}
-}
-
-// Add a service policy to a BusinessPolicyEntry
-// returns true if there is an existing entry for svcId and it is updated with the new policy with is different.
+// Add a service policy to a BusinessPolicyEntry.
+// Returns true if there is an existing entry for the service id, and it is updated with the new policy.
 // If the old and new service policies are same, it returns false.
 func (p *BusinessPolicyEntry) AddServicePolicy(svcPolicy *externalpolicy.ExternalPolicy, svcId string) (bool, error) {
 	if svcPolicy == nil || svcId == "" {
@@ -142,8 +130,8 @@ func (p *BusinessPolicyEntry) AddServicePolicy(svcPolicy *externalpolicy.Externa
 	}
 }
 
-// Remove a service policy from a BusinessPolicyEntry
-// It returns true if the service policy exists and is removed
+// Remove a service policy from a BusinessPolicyEntry.
+// It returns true if the service policy exists and is removed.
 func (p *BusinessPolicyEntry) RemoveServicePolicy(svcId string) bool {
 	if svcId == "" {
 		return false
@@ -153,7 +141,7 @@ func (p *BusinessPolicyEntry) RemoveServicePolicy(svcId string) bool {
 	if !found {
 		return false
 	} else {
-		// An empty polcy is also tracked in the business policy manager, this way we know if there is
+		// An empty policy is also tracked in the business policy manager, this way we know if there is
 		// new service policy added later.
 		// The business policy manager does not track all the service policies referenced by a business policy.
 		// It only tracks the ones that have agreements associated with it.
@@ -181,9 +169,9 @@ func (p *BusinessPolicyEntry) UpdateEntry(pol *businesspolicy.BusinessPolicy, po
 
 	// validate and convert the exchange business policy to internal policy format
 	if err := pol.Validate(); err != nil {
-		return nil, fmt.Errorf("Failed to validate the business policy %v. %v", *pol, err)
+		return nil, fmt.Errorf("Failed to validate the deployment policy %v. %v", *pol, err)
 	} else if pPolicy, err := pol.GenPolicyFromBusinessPolicy(polId); err != nil {
-		return nil, fmt.Errorf("Failed to convert the business policy to internal policy format: %v. %v", *pol, err)
+		return nil, fmt.Errorf("Failed to convert the deployment policy to internal policy format: %v. %v", *pol, err)
 	} else {
 		p.Policy = pPolicy
 		return pPolicy, nil
@@ -202,11 +190,11 @@ func (pm *BusinessPolicyManager) String() string {
 	pm.polMapLock.Lock()
 	defer pm.polMapLock.Unlock()
 
-	res := "Policy Manager: "
+	res := "Deployment Policy Manager:\n"
 	for org, orgMap := range pm.OrgPolicies {
 		res += fmt.Sprintf("Org: %v ", org)
 		for pat, pe := range orgMap {
-			res += fmt.Sprintf("Business policy: %v %v ", pat, pe)
+			res += fmt.Sprintf("Deployment policy: %v %v \n", pat, pe)
 		}
 	}
 
@@ -214,7 +202,7 @@ func (pm *BusinessPolicyManager) String() string {
 	defer pm.spMapLock.Unlock()
 
 	for _, served := range pm.ServedPolicies {
-		res += fmt.Sprintf(" Serve: %v ", served)
+		res += fmt.Sprintf("Serve: %v ", served)
 	}
 	return res
 }
@@ -231,7 +219,7 @@ func (pm *BusinessPolicyManager) ShortString() string {
 			if pe != nil {
 				s = pe.ShortString()
 			}
-			res += fmt.Sprintf("Business policy: %v %v ", pat, s)
+			res += fmt.Sprintf("Deployment policy: %v %v ", pat, s)
 		}
 	}
 	return res
@@ -245,50 +233,94 @@ func NewBusinessPolicyManager(eventChannel chan events.Message) *BusinessPolicyM
 	return pm
 }
 
-func (pm *BusinessPolicyManager) hasOrg(org string) bool {
-	if _, ok := pm.OrgPolicies[org]; ok {
-		return true
+// New methods to support the IPolicyManager interface.
+func (pm *BusinessPolicyManager) NumberPolicies() int {
+	pm.polMapLock.Lock()
+	defer pm.polMapLock.Unlock()
+
+	num := 0
+	for _, polMap := range pm.OrgPolicies {
+		num = num + len(polMap)
 	}
-	return false
+	return num
+}
+
+func (pm *BusinessPolicyManager) GetAllAgreementProtocols() map[string]policy.BlockchainList {
+	pm.polMapLock.Lock()
+	defer pm.polMapLock.Unlock()
+
+	protocols := make(map[string]policy.BlockchainList)
+	for _, polMap := range pm.OrgPolicies {
+		for _, pol := range polMap {
+			for _, agp := range pol.Policy.AgreementProtocols {
+				protocols[agp.Name] = agp.Blockchains
+			}
+		}
+	}
+	return protocols
+}
+
+// New methods to support the IPolicyManager interface.
+
+func (pm *BusinessPolicyManager) hasOrg(org string) bool {
+	_, ok := pm.OrgPolicies[org]
+	return ok
 }
 
 func (pm *BusinessPolicyManager) hasBusinessPolicy(org string, polName string) bool {
 	if pm.hasOrg(org) {
-		if _, ok := pm.OrgPolicies[org][polName]; ok {
-			return true
-		}
+		_, ok := pm.OrgPolicies[org][polName]
+		return ok
 	}
 	return false
 }
 
-func (pm *BusinessPolicyManager) GetAllBusinessPolicyEntriesForOrg(org string) map[string]*BusinessPolicyEntry {
+// Not Used
+// func (pm *BusinessPolicyManager) GetAllBusinessPolicyEntriesForOrg(org string) map[string]*BusinessPolicyEntry {
+// 	pm.polMapLock.Lock()
+// 	defer pm.polMapLock.Unlock()
+
+// 	if pm.hasOrg(org) {
+// 		// TODO: This in unsafe fix it.
+// 		return pm.OrgPolicies[org]
+// 	}
+// 	return nil
+// }
+
+// Returns a safe array of all the business policies in a given org.
+func (pm *BusinessPolicyManager) GetAllBusinessPolicyNames(org string) []string {
 	pm.polMapLock.Lock()
 	defer pm.polMapLock.Unlock()
 
+	var names []string
 	if pm.hasOrg(org) {
-		return pm.OrgPolicies[org]
-	}
-	return nil
-}
-
-func (pm *BusinessPolicyManager) GetBusinessPolicyEntry(org string, pol *policy.Policy) *BusinessPolicyEntry {
-	pm.polMapLock.Lock()
-	defer pm.polMapLock.Unlock()
-
-	if orgMap, ok := pm.OrgPolicies[org]; ok {
-		_, polName := cutil.SplitOrgSpecUrl(pol.Header.Name)
-		if pBE, found := orgMap[polName]; found {
-			return pBE
+		names = make([]string, 0, len(pm.OrgPolicies[org]))
+		for n, _ := range pm.OrgPolicies[org] {
+			names = append(names, n)
 		}
 	}
-	return nil
+	return names
 }
 
+// Returns a copy of the Business Policy and its last updated time.
+func (pm *BusinessPolicyManager) GetBusinessPolicy(org string, polName string) (*policy.Policy, uint64) {
+	pm.polMapLock.Lock()
+	defer pm.polMapLock.Unlock()
+
+	if pm.hasBusinessPolicy(org, polName) {
+		bpe := pm.OrgPolicies[org][polName]
+		polCopy := bpe.Policy.DeepCopy()
+		return polCopy, bpe.Updated
+	}
+	return nil, 0
+}
+
+// Return a safe copy of the list of orgs whose deployment policy is being served by this Agbot.
 func (pm *BusinessPolicyManager) GetAllPolicyOrgs() []string {
 	pm.polMapLock.Lock()
 	defer pm.polMapLock.Unlock()
 
-	orgs := make([]string, 0)
+	orgs := make([]string, 0, len(pm.OrgPolicies))
 	for org, _ := range pm.OrgPolicies {
 		orgs = append(orgs, org)
 	}
@@ -301,10 +333,11 @@ func (pm *BusinessPolicyManager) setServedBusinessPolicies(servedPols map[string
 	defer pm.spMapLock.Unlock()
 
 	// copy the input map
+	// TODO: this might not be safe
 	pm.ServedPolicies = servedPols
 }
 
-// chek if the agbot serves the given business policy or not.
+// Check if the agbot serves the deployment policy.
 func (pm *BusinessPolicyManager) serveBusinessPolicy(polOrg string, polName string) bool {
 	pm.spMapLock.Lock()
 	defer pm.spMapLock.Unlock()
@@ -353,19 +386,21 @@ func (pm *BusinessPolicyManager) GetServedNodeOrgs(polOrg string, polName string
 // Given a list of policy_org/policy/node_org triplets that this agbot is supposed to serve, save that list and
 // convert it to map of maps (keyed by org and policy name) to hold all the policy meta data. This
 // will allow the BusinessPolicyManager to know when the policy metadata changes.
-func (pm *BusinessPolicyManager) SetCurrentBusinessPolicies(servedPols map[string]exchange.ServedBusinessPolicy, polManager *policy.PolicyManager) error {
+
+//func (pm *BusinessPolicyManager) SetCurrentBusinessPolicies(servedPols map[string]exchange.ServedBusinessPolicy, polManager *policy.PolicyManager) error {
+func (pm *BusinessPolicyManager) SetCurrentBusinessPolicies(servedPols map[string]exchange.ServedBusinessPolicy) error {
 	pm.polMapLock.Lock()
 	defer pm.polMapLock.Unlock()
 
-	// Exit early if nothing to do
+	// Exit early if nothing to do.
 	if len(pm.ServedPolicies) == 0 && len(servedPols) == 0 {
 		return nil
 	}
 
-	// save the served business policies in the pm
+	// Save the served business policies.
 	pm.setServedBusinessPolicies(servedPols)
 
-	// Create a new map of maps
+	// If this is the first time to update served policies, create a new map of maps.
 	if len(pm.OrgPolicies) == 0 {
 		pm.OrgPolicies = make(map[string]map[string]*BusinessPolicyEntry)
 	}
@@ -383,9 +418,8 @@ func (pm *BusinessPolicyManager) SetCurrentBusinessPolicies(servedPols map[strin
 	// this agbot is no longer serving any business polices in that org, we can get rid of everything in that org.
 	for org, _ := range pm.OrgPolicies {
 		if !pm.serveOrg(org) {
-			// delete org and all policy files in it.
-			glog.V(5).Infof("Deleting the org %v from the policy manager because it is no longer hosted by the agbot.", org)
-			if err := pm.deleteOrg(org, polManager); err != nil {
+			glog.V(5).Infof("Deleting the org %v from the dpoloyment policy manager because it is no longer served by the agbot.", org)
+			if err := pm.deleteOrg(org); err != nil {
 				return err
 			}
 		}
@@ -394,10 +428,10 @@ func (pm *BusinessPolicyManager) SetCurrentBusinessPolicies(servedPols map[strin
 	return nil
 }
 
-// For each org that the agbot is supporting, take the set of business policies defined within the org and save them into
+// For each org that the agbot is supporting, take the set of deployment policies defined within the org and save them into
 // the BusinessPolicyManager. When new or updated policies are discovered, clear ServicePolicies for that BusinessPolicyEntry so that
-// new businees polices can be filled later.
-func (pm *BusinessPolicyManager) UpdatePolicies(org string, definedPolicies map[string]exchange.ExchangeBusinessPolicy, polManager *policy.PolicyManager) error {
+// new deployment polices can be filled later.
+func (pm *BusinessPolicyManager) UpdatePolicies(org string, definedPolicies map[string]exchange.ExchangeBusinessPolicy) error {
 	pm.polMapLock.Lock()
 	defer pm.polMapLock.Unlock()
 
@@ -407,15 +441,15 @@ func (pm *BusinessPolicyManager) UpdatePolicies(org string, definedPolicies map[
 		return nil
 	}
 
-	// If there is no business policy in the org, delete the org from the pm and all of the policy files in the org.
+	// If there is no business policy in the org, delete the org from the pm.
 	// This is the case where business policy or the org has been deleted but the agbot still hosts the policy on the exchange.
 	if definedPolicies == nil || len(definedPolicies) == 0 {
 		// delete org and all policy files in it.
-		glog.V(5).Infof("Deleting the org %v from the policy manager because it does not contain a business policy.", org)
-		return pm.deleteOrg(org, polManager)
+		glog.V(5).Infof("Deleting org %v from the deployment policy manager because it does not contain a business policy.", org)
+		return pm.deleteOrg(org)
 	}
 
-	// Delete the business policy from the pm if the policy does not exist on the exchange or the agbot
+	// Delete the deployment policy if it does not exist on the exchange or the agbot
 	// does not serve it any more.
 	for polName, _ := range pm.OrgPolicies[org] {
 		need_delete := true
@@ -429,9 +463,9 @@ func (pm *BusinessPolicyManager) UpdatePolicies(org string, definedPolicies map[
 		}
 
 		if need_delete {
-			glog.V(5).Infof("Deleting business policy %v from the org %v from the policy manager because the policy no longer exists.", polName, org)
-			if err := pm.deleteBusinessPolicy(org, polName, polManager); err != nil {
-				glog.Errorf("Error deleting business policy %v from the org %v in the policy manager. Error: %v", polName, org, err)
+			glog.V(5).Infof("Deleting deployment policy %v/%v because the policy no longer exists.", org, polName)
+			if err := pm.deleteBusinessPolicy(org, polName); err != nil {
+				glog.Errorf("Error deleting deployment policy %v/%v, error: %v", org, polName, err)
 				continue
 			}
 		}
@@ -443,8 +477,8 @@ func (pm *BusinessPolicyManager) UpdatePolicies(org string, definedPolicies map[
 		if !pm.serveBusinessPolicy(org, exchange.GetId(polId)) {
 			continue
 		}
-		if err := pm.updateBusinessPolicy(org, polId, &pol, polManager); err != nil {
-			glog.Errorf("Error updating business policy %v from the org %v in the policy manager. Error: %v", polId, org, err)
+		if err := pm.UpdateBusinessPolicy(org, polId, &pol); err != nil {
+			glog.Errorf("Error updating deployment policy %v/%v, error: %v", org, polId, err)
 			continue
 		}
 	}
@@ -452,8 +486,8 @@ func (pm *BusinessPolicyManager) UpdatePolicies(org string, definedPolicies map[
 	return nil
 }
 
-// Add or update the given service policy. Send an event message if it is updating so that the catcher can re-evaluate the agreements.
-func (pm *BusinessPolicyManager) updateBusinessPolicy(org string, polId string, pol *businesspolicy.BusinessPolicy, polManager *policy.PolicyManager) error {
+// Add or update the given deployment policy. If the policy has changed, send an event to notify the other workers.
+func (pm *BusinessPolicyManager) UpdateBusinessPolicy(org string, polId string, pol *businesspolicy.BusinessPolicy) error {
 	need_new_entry := true
 	if pm.hasBusinessPolicy(org, exchange.GetId(polId)) {
 		if pe := pm.OrgPolicies[org][exchange.GetId(polId)]; pe != nil {
@@ -462,23 +496,23 @@ func (pm *BusinessPolicyManager) updateBusinessPolicy(org string, polId string, 
 			// The PolicyEntry is already there, so check if the policy definition has changed.
 			// If the policy has changed, Send a PolicyChangedMessage message. Otherwise the policy
 			// definition we have is current.
-			newHash, err := hashPolicy(pol)
+			newHash, err := cutil.HashObject(pol)
 			if err != nil {
-				return errors.New(fmt.Sprintf("unable to hash the business policy %v for %v, error %v", pol, org, err))
+				return errors.New(fmt.Sprintf("unable to hash the deployment policy %v/%v, error %v", org, pol, err))
 			}
 			if !bytes.Equal(pe.Hash, newHash) {
-				// update the cache
-				glog.V(5).Infof("Updating policy entry for %v of org %v because it is changed. ", polId, org)
+				// Update the cache.
+				glog.V(5).Infof("Updating policy entry for %v/%v because it is changed.", org, polId)
 				newPol, err := pe.UpdateEntry(pol, polId, newHash)
 				if err != nil {
-					return errors.New(fmt.Sprintf("error updating business policy entry for %v of org %v: %v", polId, org, err))
+					return errors.New(fmt.Sprintf("error updating deployment policy entry for %v/%v, error %v", org, polId, err))
 				}
 
-				// notify the policy manager
-				polManager.UpdatePolicy(org, newPol)
+				// // notify the policy manager
+				// polManager.UpdatePolicy(org, newPol)
 
-				// send a message so that other process can handle it by re-negotiating agreements
-				glog.V(3).Infof(fmt.Sprintf("Policy manager detected changed business policy %v", polId))
+				// Send a message so that other workers can handle it.
+				glog.V(3).Infof(fmt.Sprintf("Deployment policy manager detected changed deployment policy %v/%v", org, polId))
 				if policyString, err := policy.MarshalPolicy(newPol); err != nil {
 					glog.Errorf(fmt.Sprintf("Error trying to marshal policy %v error: %v", newPol, err))
 				} else {
@@ -491,33 +525,35 @@ func (pm *BusinessPolicyManager) updateBusinessPolicy(org string, polId string, 
 	//If there's no BusinessPolicyEntry yet, create one
 	if need_new_entry {
 		if newPE, err := NewBusinessPolicyEntry(pol, polId); err != nil {
-			return errors.New(fmt.Sprintf("unable to create business policy entry for %v, error %v", pol, err))
+			return errors.New(fmt.Sprintf("unable to create deployment policy entry for %v/%v, error %v", org, polId, err))
 		} else {
 			pm.OrgPolicies[org][exchange.GetId(polId)] = newPE
 
-			// notify the policy manager
-			polManager.AddPolicy(org, newPE.Policy)
+			// // notify the policy manager
+			// polManager.AddPolicy(org, newPE.Policy)
 		}
 	}
 
 	return nil
 }
 
-// When an org is removed from the list of supported orgs and business policies, remove the org
+// When an org is removed from the list of supported orgs and deployment policies, remove the org
 // from the BusinessPolicyManager.
-func (pm *BusinessPolicyManager) deleteOrg(org_in string, polManager *policy.PolicyManager) error {
+
+//func (pm *BusinessPolicyManager) deleteOrg(org_in string, polManager *policy.PolicyManager) error {
+func (pm *BusinessPolicyManager) deleteOrg(org_in string) error {
 	// send PolicyDeletedMessage message for each business polices in the org
 	for org, orgMap := range pm.OrgPolicies {
 		if org == org_in {
 			for polName, pe := range orgMap {
 				if pe != nil {
-					glog.V(3).Infof(fmt.Sprintf("Policy manager detected deleted policy %v", polName))
+					glog.V(3).Infof(fmt.Sprintf("Deployment policy manager detected deleted policy %v", polName))
 
-					// notify the policy manager
-					polManager.DeletePolicy(org, pe.Policy)
+					// // notify the policy manager
+					// polManager.DeletePolicy(org, pe.Policy)
 
 					if policyString, err := policy.MarshalPolicy(pe.Policy); err != nil {
-						glog.Errorf(fmt.Sprintf("Policy manager error trying to marshal policy %v error: %v", polName, err))
+						glog.Errorf(fmt.Sprintf("Deployment policy manager error trying to marshal policy %v error: %v", polName, err))
 					} else {
 						pm.eventChannel <- events.NewPolicyDeletedMessage(events.DELETED_POLICY, "", pe.Policy.Header.Name, org, policyString)
 					}
@@ -535,15 +571,15 @@ func (pm *BusinessPolicyManager) deleteOrg(org_in string, polManager *policy.Pol
 }
 
 // When a business policy is removed from the exchange, remove it from the BusinessPolicyManager, PolicyManager and send a PolicyDeletedMessage.
-func (pm *BusinessPolicyManager) deleteBusinessPolicy(org string, polName string, polManager *policy.PolicyManager) error {
+func (pm *BusinessPolicyManager) deleteBusinessPolicy(org string, polName string) error {
 	// Get rid of the business policy from the pm
 	if pm.hasOrg(org) {
 		if pe, ok := pm.OrgPolicies[org][polName]; ok {
 			if pe != nil {
 				glog.V(3).Infof(fmt.Sprintf("Policy manager detected deleted policy %v", polName))
 
-				// notify the policy manager
-				polManager.DeletePolicy(org, pe.Policy)
+				// // notify the policy manager
+				// polManager.DeletePolicy(org, pe.Policy)
 
 				if policyString, err := policy.MarshalPolicy(pe.Policy); err != nil {
 					glog.Errorf(fmt.Sprintf("Policy manager error trying to marshal policy %v error: %v", polName, err))
@@ -608,7 +644,7 @@ func (pm *BusinessPolicyManager) AddServicePolicy(businessPolOrg string, busines
 	policyString := ""
 
 	if updated, err := pBE.AddServicePolicy(servicePol, serviceId); err != nil {
-		return fmt.Errorf("Faild to add service policy for service %v to the policy manager. %v", serviceId, err)
+		return fmt.Errorf("Failed to add service policy for service %v to the policy manager. %v", serviceId, err)
 	} else {
 		if updated {
 			// send an event for service policy changed
@@ -636,7 +672,7 @@ func (pm *BusinessPolicyManager) AddServicePolicy(businessPolOrg string, busines
 				for sId, _ := range pbe.ServicePolicies {
 					if sId == serviceId {
 						if updated, err := pbe.AddServicePolicy(servicePol, serviceId); err != nil {
-							return fmt.Errorf("Faild to update service policy for service %v to the policy manager. %v", serviceId, err)
+							return fmt.Errorf("Failed to update service policy for service %v to the policy manager. %v", serviceId, err)
 						} else if updated {
 							// send an event for service policy changed
 							if policyString == "" {

@@ -613,10 +613,10 @@ func (w *AgreementWorker) syncOnInit() error {
 				glog.Errorf(logString(fmt.Sprintf("unable to verify merged policy %v and %v for agreement %v, error: %v", mergedPolicy, pol, ag.CurrentAgreementId, err)))
 				w.Messages() <- events.NewInitAgreementCancelationMessage(events.AGREEMENT_ENDED, w.producerPH[ag.AgreementProtocol].GetTerminationCode(producer.TERM_REASON_POLICY_CHANGED), ag.AgreementProtocol, ag.CurrentAgreementId, ag.GetDeploymentConfig())
 
-			} else if err := w.pm.AttemptingAgreement(policies, ag.CurrentAgreementId, exchange.GetOrg(w.GetExchangeId())); err != nil {
-				glog.Errorf(logString(fmt.Sprintf("cannot update agreement count for %v, error: %v", ag.CurrentAgreementId, err)))
-			} else if err := w.pm.FinalAgreement(policies, ag.CurrentAgreementId, exchange.GetOrg(w.GetExchangeId())); err != nil {
-				glog.Errorf(logString(fmt.Sprintf("cannot update agreement count for %v, error: %v", ag.CurrentAgreementId, err)))
+			// } else if err := w.pm.AttemptingAgreement(policies, ag.CurrentAgreementId, exchange.GetOrg(w.GetExchangeId())); err != nil {
+			// 	glog.Errorf(logString(fmt.Sprintf("cannot update agreement count for %v, error: %v", ag.CurrentAgreementId, err)))
+			// } else if err := w.pm.FinalAgreement(policies, ag.CurrentAgreementId, exchange.GetOrg(w.GetExchangeId())); err != nil {
+			// 	glog.Errorf(logString(fmt.Sprintf("cannot update agreement count for %v, error: %v", ag.CurrentAgreementId, err)))
 
 				// There is a small window where an agreement might not have been recorded in the exchange. Let's just make sure.
 			} else if ag.AgreementAcceptedTime != 0 && ag.AgreementTerminatedTime == 0 {
@@ -639,7 +639,7 @@ func (w *AgreementWorker) syncOnInit() error {
 						}
 					}
 				}
-				glog.V(3).Infof(logString(fmt.Sprintf("added agreement %v to policy agreement counter.", ag.CurrentAgreementId)))
+				glog.V(3).Infof(logString(fmt.Sprintf("agreement %v reconciled.", ag.CurrentAgreementId)))
 			}
 
 		}

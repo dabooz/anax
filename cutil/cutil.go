@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"github.com/golang/glog"
 	"github.com/open-horizon/anax/config"
+	"golang.org/x/crypto/sha3"
 	"net"
 	"os"
 	"path"
@@ -712,4 +713,13 @@ func RemoveArchFromServiceId(sId string) string {
 	}
 
 	return sId_no_arch
+}
+
+func HashObject(p interface{}) ([]byte, error) {
+	if ps, err := json.Marshal(p); err != nil {
+		return nil, errors.New(fmt.Sprintf("unable to marshal %v to a string, error %v", p, err))
+	} else {
+		hash := sha3.Sum256([]byte(ps))
+		return hash[:], nil
+	}
 }

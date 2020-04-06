@@ -14,7 +14,7 @@ const HORIZON_VERSION = "local build"
 const MINIMUM_EXCHANGE_VERSION = "2.15.1"
 
 // the preferred exchange version
-const PREFERRED_EXCHANGE_VERSION = "2.15.1"
+const PREFERRED_EXCHANGE_VERSION = "2.18.0"
 
 // This function verifies the exchange version to make sure it meets the requirement.
 // It return nil if the exchange version is okay.

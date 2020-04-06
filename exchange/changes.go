@@ -59,8 +59,16 @@ func (e ExchangeChange) IsAgbotMessage(agbot string) bool {
 }
 
 func (e ExchangeChange) IsNode(node string) bool {
-	changeNode := fmt.Sprintf("%v/%v", e.OrgID, e.ID)
-	return changeNode == node && e.Resource == RESOURCE_NODE
+	if node != "" {
+		changeNode := fmt.Sprintf("%v/%v", e.OrgID, e.ID)
+		return changeNode == node && e.Resource == RESOURCE_NODE
+	} else {
+		return e.Resource == RESOURCE_NODE
+	}
+}
+
+func (e ExchangeChange) GetFullID() string {
+	return fmt.Sprintf("%v/%v", e.OrgID, e.ID)
 }
 
 func (e ExchangeChange) IsAgbot(agbot string) bool {
@@ -69,8 +77,12 @@ func (e ExchangeChange) IsAgbot(agbot string) bool {
 }
 
 func (e ExchangeChange) IsNodePolicy(node string) bool {
-	changeNode := fmt.Sprintf("%v/%v", e.OrgID, e.ID)
-	return changeNode == node && e.Resource == RESOURCE_NODE_POLICY
+	if node != "" {
+		changeNode := fmt.Sprintf("%v/%v", e.OrgID, e.ID)
+		return changeNode == node && e.Resource == RESOURCE_NODE_POLICY
+	} else {
+		return e.Resource == RESOURCE_NODE_POLICY
+	}
 }
 
 func (e ExchangeChange) IsNodeError(node string) bool {

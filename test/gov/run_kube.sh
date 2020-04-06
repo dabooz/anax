@@ -28,21 +28,20 @@ then
 	$cprefix sudo snap install microk8s --classic --channel=1.14/stable
 	IRC=$?
 	if [ $IRC -ne 0 ]; then echo "Unable to install microk8s: $IRC"; exit 1; fi
+fi
 
-	#
-	# Wait for ready status
-	#
-	echo "Waiting for Kube test environment to start"
-	$cprefix microk8s.status --wait-ready
-	RC=$?
-	if [ $RC -ne 0 ]
-	then
-		echo "Error waiting for microk8s to initialize: $RC"
-		$cprefix microk8s.status
-		$cprefix microk8s.inspect
-		exit 1
-	fi
-
+#
+# Wait for ready status
+#
+echo "Waiting for Kube test environment to start"
+$cprefix microk8s.status --wait-ready --timeout 60
+RC=$?
+if [ $RC -ne 0 ]
+then
+	echo "Error waiting for microk8s to initialize: $RC"
+	$cprefix microk8s.status
+	$cprefix microk8s.inspect
+	exit 1
 fi
 
 # Artificial delay that seems to allow time for microk8s to start.

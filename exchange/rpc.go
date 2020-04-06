@@ -105,6 +105,14 @@ func (d *SearchResultDevice) GetNodeType() string {
 	}
 }
 
+func NewSearchResultDevice(id string, nodeType string, publicKey string) *SearchResultDevice {
+	return &SearchResultDevice{
+		Id: id,
+		NodeType: nodeType,
+		PublicKey: publicKey,
+	}
+}
+
 // This function creates the exchange search message body.
 func CreateSearchMSRequest() *SearchExchangeMSRequest {
 
@@ -164,6 +172,7 @@ type GetDevicesResponse struct {
 	LastIndex int               `json:"lastIndex"`
 }
 
+// TODO: Cache nodes
 func GetExchangeDevice(httpClientFactory *config.HTTPClientFactory, deviceId string, credId string, credPasswd string, exchangeUrl string) (*Device, error) {
 
 	glog.V(3).Infof(rpclogString(fmt.Sprintf("retrieving device %v from exchange", deviceId)))

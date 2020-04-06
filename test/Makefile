@@ -2,7 +2,7 @@
 SHELL := /bin/bash
 
 #Versioning
-DOCKER_EXCH_TAG := 2.15.1
+DOCKER_EXCH_TAG := 2.18.0
 PKG_URL_BASE := http://169.45.88.181/linux/ubuntu
 PKGS_URL := $(PKG_URL_BASE)/dists/xenial-testing/main/binary-amd64/Packages
 DEB_PKGS_URL := $(PKG_URL_BASE)/pool/main/h/horizon
@@ -186,7 +186,7 @@ run-exchange-db: test-network
 clean:
 	@echo -e "\nStarting cleanup"
 	@echo "Clean up kube environment"
-	gov/stop_kube.sh
+	# gov/stop_kube.sh
 	@echo "Shutdown anax cleanly"
 	-@curl -sSLX DELETE http://localhost:8510/node 2>/dev/null || true
 	@echo "Removing agbot container"
@@ -277,7 +277,7 @@ exchange-image:
 
 test: clean $(ANAX_SOURCE)/anax run-dockerreg run-exchange run-css run-agbot
 	@echo -e  "\nSetting up agent in kube"
-	gov/run_kube.sh $(AGBOT_TEMPFS) $(ANAX_SOURCE)
+	#gov/run_kube.sh $(AGBOT_TEMPFS) $(ANAX_SOURCE)
 	@echo -e  "\nStarting tests"
 	docker exec $(DOCKER_AGBOT_CNAME) bash -c "export $(TEST_VARS); export $(MSGHUB_VARS); /root/gov-combined.sh"
 

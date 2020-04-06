@@ -129,12 +129,9 @@ func (e MakeAgreementCommand) ShortString() string {
 }
 
 func NewMakeAgreementCommand(pPol policy.Policy, cPol policy.Policy, org string, polname string, dev exchange.SearchResultDevice, cachedServicePolicies map[string]externalpolicy.ExternalPolicy) *MakeAgreementCommand {
-
-	copiedConsumerPolicy := cPol.DeepCopy()
-
 	return &MakeAgreementCommand{
 		ProducerPolicy:     pPol,
-		ConsumerPolicy:     *copiedConsumerPolicy,
+		ConsumerPolicy:     cPol,
 		Org:                org,
 		ConsumerPolicyName: polname,
 		Device:             dev,
@@ -341,8 +338,12 @@ func NewObjectPoliciesChangeCommand(msg *events.MMSObjectPoliciesMessage) *Objec
 type ServedPatternCommand struct {
 }
 
-func (e ServedPatternCommand) ShortString() string {
+func (e ServedPatternCommand) String() string {
 	return "ServedPatternCommand"
+}
+
+func (e ServedPatternCommand) ShortString() string {
+	return e.String()
 }
 
 func NewServedPatternCommand() *ServedPatternCommand {
@@ -353,10 +354,29 @@ func NewServedPatternCommand() *ServedPatternCommand {
 type ServedPolicyCommand struct {
 }
 
-func (e ServedPolicyCommand) ShortString() string {
+func (e ServedPolicyCommand) String() string {
 	return "ServedPolicyCommand"
+}
+
+func (e ServedPolicyCommand) ShortString() string {
+	return e.String()
 }
 
 func NewServedPolicyCommand() *ServedPolicyCommand {
 	return &ServedPolicyCommand{}
+}
+
+// ==============================================================================================================
+type NodeChangeCommand struct {
+	Msg events.ExchangeChangeMessage
+}
+
+func (e NodeChangeCommand) ShortString() string {
+	return e.Msg.ShortString()
+}
+
+func NewNodeChangeCommand(msg *events.ExchangeChangeMessage) *NodeChangeCommand {
+	return &NodeChangeCommand{
+		Msg: *msg,
+	}
 }

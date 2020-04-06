@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/golang/glog"
 	"github.com/open-horizon/anax/abstractprotocol"
+	"github.com/open-horizon/anax/agreementbot/matchcache"
 	"github.com/open-horizon/anax/agreementbot/persistence"
 	"github.com/open-horizon/anax/compcheck"
 	"github.com/open-horizon/anax/config"
@@ -227,7 +228,7 @@ type AgreementWorker interface {
 }
 
 type BaseAgreementWorker struct {
-	pm         *policy.PolicyManager
+	pm         policy.IPolicyManager
 	db         persistence.AgbotDatabase
 	config     *config.HorizonConfig
 	alm        *AgreementLockManager
@@ -235,6 +236,7 @@ type BaseAgreementWorker struct {
 	httpClient *http.Client
 	ec         *worker.BaseExchangeContext
 	mmsObjMgr  *MMSObjectPolicyManager
+	matchCache *matchcache.MatchCache
 }
 
 // A local implementation of the ExchangeContext interface because Agbot agreement workers are not full featured workers.
@@ -406,7 +408,7 @@ func (b *BaseAgreementWorker) InitiateNewAgreement(cph ConsumerProtocolHandler, 
 			return
 		}
 
-		// Do not make proposals for services without a deployment configuration got its node type.
+		// Do not make proposals for services without a deployment configuration for its node type.
 		if nodeType == DEVICE_TYPE_DEVICE && workloadDetails.GetDeployment() == "" {
 			glog.Warningf(BAWlogstring(workerId, fmt.Sprintf("cannot make agreement with node %v for service %v/%v %v because it has no deployment configuration.", wi.Device.Id, workload.Org, workload.WorkloadURL, workload.Version)))
 			return
@@ -425,7 +427,7 @@ func (b *BaseAgreementWorker) InitiateNewAgreement(cph ConsumerProtocolHandler, 
 
 		policy_match := false
 
-		// Check if the depended services are suspended. If any of them are suspended, then abort the agreement initialization process.
+		// Check if the required services are suspended. If any of them are suspended, then abort the agreement initialization process.
 		for _, apiSpec := range *asl {
 			for _, devMS := range exchangeDev.RegisteredServices {
 				if devMS.ConfigState == exchange.SERVICE_CONFIGSTATE_SUSPENDED {
@@ -660,6 +662,14 @@ func (b *BaseAgreementWorker) InitiateNewAgreement(cph ConsumerProtocolHandler, 
 		// Update the agreement in the DB with the proposal and policy
 	} else if err := cph.PersistAgreement(wi, proposal, workerId); err != nil {
 		glog.Errorf(err.Error())
+	} else if wi.ConsumerPolicy.PatternId == "" {
+		nodePolicy := policy.ExtractExternalPolicyFromPolicy(&wi.ProducerPolicy)
+		err := b.matchCache.CacheNode(nodePolicy, fmt.Sprintf("%v/%v", wi.Org, wi.ConsumerPolicyName))
+		if err != nil {
+			glog.Errorf(BAWlogstring(workerId, fmt.Sprintf("error caching match results, node %v, error %v", wi.Device.Id, err)))
+		}
+		glog.V(3).Infof(BAWlogstring(workerId, fmt.Sprintf("Match cache: %v", b.matchCache)))
+
 	}
 
 }

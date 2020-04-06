@@ -96,3 +96,13 @@ func GenPolicyFromExternalPolicy(extPol *externalpolicy.ExternalPolicy, polName 
 
 	return pPolicy, nil
 }
+
+// Extract external policy from a full policy object.
+func ExtractExternalPolicyFromPolicy(pol *Policy) *externalpolicy.ExternalPolicy {
+
+	extPolicy := new(externalpolicy.ExternalPolicy)
+	extPolicy.Properties = append(extPolicy.Properties, pol.Properties...)
+	extPolicy.Constraints = append(extPolicy.Constraints, pol.Constraints...)
+
+	return extPolicy
+}
