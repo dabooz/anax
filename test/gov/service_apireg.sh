@@ -510,7 +510,7 @@ cat <<EOF >$KEY_TEST_DIR/svc_netspeed.json
   },
   "deploymentSignature":"",
   "clusterDeployment": {
-    "operatorYamlArchive": "/root/input_files/k8s_deploy/topservice-operator.tar.gz"
+    "operatorYamlArchive": "/root/input_files/k8s_deploy/treeservice-operator.tar.gz"
   },
   "clusterDeploymentSignature": ""
 }
@@ -581,7 +581,7 @@ cat <<EOF >$KEY_TEST_DIR/svc_netspeed.json
   },
   "deploymentSignature":"",
   "clusterDeployment": {
-    "operatorYamlArchive": "/root/input_files/k8s_deploy/topservice-operator.tar.gz"
+    "operatorYamlArchive": "/root/input_files/k8s_deploy/treeservice-operator.tar.gz"
   },
   "clusterDeploymentSignature": ""
 }
@@ -766,24 +766,27 @@ cat <<EOF >$KEY_TEST_DIR/svc_k8s1.json
   "requiredServices":[
   ],
   "userInput": [
-      {
-        "name": "var1",
-        "label": "",
-        "type": "string"
-       },
-      {
-        "name": "var2",
-        "label": "",
-        "type": "int"
-      },
-      {
-        "name": "var3",
-        "label": "",
-        "type": "float"
-      }
+    {
+        "name": "DEBUG",
+        "label": "Enable debug",
+        "type": "boolean",
+        "defaultValue": "false"
+    },
+    {
+        "name": "LISTEN_PORT",
+        "label": "The port to receive network calls",
+        "type": "string",
+        "defaultValue": "4900"
+    },
+    {
+        "name": "CALL_SERVICE",
+        "label": "The list of services to call",
+        "type": "list of strings",
+        "defaultValue": "none"
+    }
   ],
   "clusterDeployment": {
-    "operatorYamlArchive": "/root/input_files/k8s_deploy/topservice-operator.tar.gz"
+    "operatorYamlArchive": "/root/input_files/k8s_deploy/treeservice-operator.tar.gz"
    },
   "clusterDeploymentSignature": ""
 }
@@ -1289,6 +1292,28 @@ read -d '' sdef <<EOF
       "nodeHealth": {}
     }
   ],
+  "userInput": [
+    {
+      "serviceOrgid": "e2edev@somecomp.com",
+      "serviceUrl": "k8s-service1",
+      "serviceArch": "amd64",
+      "serviceVersionRange": "$K8SVERS",
+      "inputs": [
+        {
+          "name": "DEBUG",
+          "value": "true"
+        },
+        {
+          "name": "LISTEN_PORT",
+          "value": 4800
+        },
+        {
+          "name": "CALL_SERVICE",
+          "value": "midservice:4810"
+        }
+      ]
+    }
+  ],
   "agreementProtocols": [
     {
       "name": "Basic"
@@ -1680,6 +1705,26 @@ read -d '' msdef <<EOF
         {
           "name": "MTN_PWS_ST_TYPE",
           "value": "WS23xx"
+        }
+      ]
+    },
+    {
+      "serviceOrgid": "e2edev@somecomp.com",
+      "serviceUrl": "k8s-service1",
+      "serviceArch": "amd64",
+      "serviceVersionRange": "$K8SVERS",
+      "inputs": [
+        {
+          "name": "DEBUG",
+          "value": "true"
+        },
+        {
+          "name": "LISTEN_PORT",
+          "value": 4800
+        },
+        {
+          "name": "CALL_SERVICE",
+          "value": "midservice:4810"
         }
       ]
     }
@@ -2098,6 +2143,28 @@ read -d '' bpk8ssvc1def <<EOF
         }
      ]
   },
+  "userInput": [
+    {
+      "serviceOrgid": "e2edev@somecomp.com",
+      "serviceUrl": "k8s-service1",
+      "serviceArch": "amd64",
+      "serviceVersionRange": "$K8SVERS",
+      "inputs": [
+        {
+          "name": "DEBUG",
+          "value": "true"
+        },
+        {
+          "name": "LISTEN_PORT",
+          "value": 4800
+        },
+        {
+          "name": "CALL_SERVICE",
+          "value": "midservice:4810"
+        }
+      ]
+    }
+  ],
   "properties": [
       {
           "name": "iame2edev",
