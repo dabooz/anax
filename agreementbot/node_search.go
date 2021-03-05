@@ -249,10 +249,19 @@ func (n *NodeSearch) searchNodesAndMakeAgreements(consumerPolicy *policy.Policy,
 			endOfResults = false
 		}
 
-		// Get all the agreements for this policy that are still active.
+		// Get all active agreements for this policy and all agrements for all of the devices in the search result.
 		pendingAgreementFilter := func() persistence.AFilter {
 			return func(a persistence.Agreement) bool {
-				return a.PolicyName == consumerPolicy.Header.Name && a.AgreementTimedout == 0
+				if a.PolicyName == consumerPolicy.Header.Name && a.AgreementTimedout == 0 {
+					return true
+				}
+
+				for _, dev := range *devices {
+					if dev.Id == a.DeviceId {
+						return true
+					}
+				}
+				return false
 			}
 		}
 
@@ -334,15 +343,22 @@ func (n *NodeSearch) searchNodesAndMakeAgreements(consumerPolicy *policy.Policy,
 
 }
 
-// Check all agreement protocol buckets to see if there are any agreements with this device.
-// Return true if there is already an agreement for this node and policy.
+// Check all agreement protocol buckets to see if there are any agreements with this node. Return true if there is already
+// an agreement for this node and policy. This function assumes that archived and terminated agreements have been filtered out.
 func (n *NodeSearch) alreadyMakingAgreementWith(dev *exchange.SearchResultDevice, consumerPolicy *policy.Policy, allAgreements map[string][]persistence.Agreement) bool {
 
-	// Check to see if we're already doing something with this device.
+	// Iterate every agreement protocol
 	for _, ags := range allAgreements {
-		// Look for any agreements with the current node.
+		// For every agreement that references the input node OR policy
 		for _, ag := range ags {
-			if ag.DeviceId == dev.Id {
+
+			// Ignore agreements that are not related to the input node.
+			if ag.DeviceId != dev.Id {
+				continue
+			}
+
+			// If there is an in-progress agreement for this node and policy, send a verify msg to make sure the node still agrees.
+			if ag.PolicyName == consumerPolicy.Header.Name {
 				if ag.AgreementFinalizedTime != 0 {
 					glog.V(5).Infof(AWlogString(fmt.Sprintf("sending agreement verify for %v", ag.CurrentAgreementId)))
 					n.ph.Get(ag.AgreementProtocol).VerifyAgreement(&ag, n.ph.Get(ag.AgreementProtocol))
@@ -350,6 +366,15 @@ func (n *NodeSearch) alreadyMakingAgreementWith(dev *exchange.SearchResultDevice
 				}
 				return true
 			}
+
+			// If there are existing agreements for this node where the use of pattern and policy is inconsistent. Since the input
+			// policy matches the current state of the node (in terms of policy or pattern usage), the existing agreement must
+			// be out-of-sync, so cancel it and allow the node to proceed with making a new agreement.
+			if (ag.Pattern == "" && consumerPolicy.PatternId != "") || (ag.Pattern != "" && consumerPolicy.PatternId == "") {
+				glog.V(3).Infof(AWlogString(fmt.Sprintf("node %v and agreement %v are inconsistent, cancelling %v", dev.Id, ag.CurrentAgreementId, ag.CurrentAgreementId)))
+				n.msgs <- events.NewABApiAgreementCancelationMessage(events.AGREEMENT_ENDED, ag.AgreementProtocol, ag.CurrentAgreementId)
+			}
+
 		}
 	}
 	return false
